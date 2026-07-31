@@ -1,0 +1,173 @@
+"""
+Caso de uso: Fragmentar PDF.
+
+Orquesta la fragmentación del PDF maestro en documentos individuales,
+organizados en la jerarquía de 11 niveles de carpetas.
+"""
+import csv
+import logging
+import os
+from typing import List, Optional
+
+from src.domain.entities import InventoryRecord, ExclusionRule
+from src.domain.ports.pdf_port import PDFServicePort
+from src.domain.ports.hierarchy_port import HierarchyBuilderPort
+from src.domain.services.folio_mapper import mapper_from_config
+from src.application.dto import ResultadoFragmentacion, InfoArchivo
+
+logger = logging.getLogger(__name__)
+
+
+class FragmentarPDFUseCase:
+    """Caso de uso para fragmentar el PDF maestro."""
+
+    def __init__(
+        self,
+        pdf_service: PDFServicePort,
+        hierarchy_builder: HierarchyBuilderPort,
+    ):
+        self._pdf_service = pdf_service
+        self._hierarchy_builder = hierarchy_builder
+
+    def ejecutar(
+        self,
+        records: List[InventoryRecord],
+        pdf_path: str,
+        output_dir: str,
+        acervo_num: str,
+        pag_pdf_inicio: int = 1,
+        segmentos: Optional[list] = None,
+        exclusiones: Optional[List[ExclusionRule]] = None,
+        page_map: Optional[dict] = None,
+        on_progress: Optional[callable] = None,
+    ) -> ResultadoFragmentacion:
+        """
+        Ejecuta la fragmentación del PDF maestro.
+
+        1. Crea FolioMapper
+        2. Para cada registro:
+           a. Si estado == REVISAR → omitir
+           b. Construir ruta jerárquica
+           c. Calcular páginas PDF
+           d. Extraer páginas
+           e. Registrar resultado
+        3. Generar CSV de pendientes
+        """
+        logger.info("Iniciando fragmentación de: %s", pdf_path)
+
+        # Crear mapper
+        mapper = mapper_from_config(
+            pag_pdf_inicio=pag_pdf_inicio,
+            segmentos=segmentos,
+            exclusiones=exclusiones,
+            page_map=page_map,
+        )
+        mapper.start_sequence()
+
+        archivos_creados: List[InfoArchivo] = []
+        errores: List[str] = []
+        pendientes: List[dict] = []
+        total = len(records)
+
+        for i, record in enumerate(records):
+            # Notificar progreso
+            if on_progress:
+                on_progress(i + 1, total, record.id)
+
+            # Omitir registros marcados como REVISAR
+            if record.estado == "REVISAR":
+                pendientes.append({
+                    "ID": record.id,
+                    "Fila": record.fila,
+                    "Registro": record.registro,
+                    "Escribano": record.escribano,
+                    "Folios": record.folios,
+                    "Motivo": "Estado REVISAR — errores sin corregir",
+                })
+                logger.warning("Omitido %s: estado REVISAR.", record.id)
+                continue
+
+            # Calcular páginas
+            pages = mapper.folio_str_to_pdf_pages(record.folios)
+            if not pages:
+                pendientes.append({
+                    "ID": record.id,
+                    "Fila": record.fila,
+                    "Registro": record.registro,
+                    "Escribano": record.escribano,
+                    "Folios": record.folios,
+                    "Motivo": "Folios no resuelven a páginas PDF",
+                })
+                errores.append(
+                    f"Error en {record.id}: folios '{record.folios}' "
+                    "no resuelven a páginas PDF."
+                )
+                continue
+
+            # Construir ruta de destino
+            try:
+                dest_path = self._hierarchy_builder.construir_ruta(
+                    record, output_dir, acervo_num,
+                )
+
+                # Crear directorio padre
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+
+                # Extraer páginas
+                self._pdf_service.extraer_paginas(pdf_path, pages, dest_path)
+
+                archivos_creados.append(InfoArchivo(
+                    path=dest_path,
+                    filename=os.path.basename(dest_path),
+                ))
+
+                # Marcar como fragmentado
+                record.estado = "FRAGMENTADO"
+
+                logger.info(
+                    "Extraído %s → %s (%d págs)",
+                    record.id, os.path.basename(dest_path), len(pages),
+                )
+
+            except Exception as e:
+                error_msg = f"Error en {record.id}: {str(e)}"
+                errores.append(error_msg)
+                logger.error(error_msg)
+
+        # Generar CSV de pendientes
+        if pendientes:
+            self._generar_csv_pendientes(output_dir, pendientes)
+
+        resultado = ResultadoFragmentacion(
+            archivos_creados=archivos_creados,
+            errores=errores,
+            total_exitos=len(archivos_creados),
+            total_fallos=len(errores),
+            metadata={
+                "total_registros": total,
+                "pendientes": len(pendientes),
+            },
+        )
+
+        logger.info(
+            "Fragmentación completada: %d éxitos, %d fallos, %d pendientes.",
+            resultado.total_exitos, resultado.total_fallos, len(pendientes),
+        )
+
+        return resultado
+
+    @staticmethod
+    def _generar_csv_pendientes(output_dir: str, pendientes: List[dict]):
+        """Genera archivo CSV con registros pendientes/omitidos."""
+        logs_dir = os.path.join(output_dir, "logs")
+        os.makedirs(logs_dir, exist_ok=True)
+        csv_path = os.path.join(logs_dir, "pendientes.csv")
+
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(
+                f, fieldnames=["ID", "Fila", "Registro", "Escribano", "Folios", "Motivo"]
+            )
+            writer.writeheader()
+            writer.writerows(pendientes)
+
+        logger.info("CSV de pendientes generado: %s", csv_path)

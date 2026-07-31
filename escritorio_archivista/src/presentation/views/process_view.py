@@ -1,0 +1,171 @@
+"""
+Vista de Procesamiento y Fragmentación.
+
+Botón de fragmentar, barra de progreso, consola dedicada
+y tabla de foliación mapeada.
+"""
+import logging
+
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QProgressBar, QGroupBox, QFileDialog,
+)
+from PySide6.QtCore import Qt, QTimer
+
+from src.application.container import Container
+from src.presentation.viewmodels.app_state import AppStateVM
+from src.presentation.viewmodels.process_vm import ProcessVM
+from src.presentation.widgets.data_table import DataTable
+from src.presentation.widgets.log_console import LogConsole
+from src.presentation.theme.colors import get_palette
+from src.presentation.theme.fonts import get_font
+
+logger = logging.getLogger(__name__)
+
+
+class ProcessView(QWidget):
+    """Vista de fragmentación del PDF maestro."""
+
+    def __init__(self, container: Container, state: AppStateVM, parent=None):
+        super().__init__(parent)
+        self._state = state
+        self._vm = ProcessVM(container, state)
+        self._palette = get_palette()
+        self._setup_ui()
+        self._connect_signals()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
+
+        # Header
+        title = QLabel("\u2702  Fragmentar PDF Maestro")
+        title.setProperty("heading", True)
+        layout.addWidget(title)
+
+        # Directorio de salida
+        output_layout = QHBoxLayout()
+        output_layout.addWidget(QLabel("Directorio de salida:"))
+        self._output_label = QLabel(self._state.output_dir or "No seleccionado")
+        self._output_label.setFont(get_font("body_sm"))
+        self._output_label.setStyleSheet(
+            f"color: {self._palette['text_secondary']};"
+        )
+        output_layout.addWidget(self._output_label, stretch=1)
+
+        self._select_dir_btn = QPushButton("\u25A3 Seleccionar")
+        self._select_dir_btn.setProperty("flat", True)
+        self._select_dir_btn.clicked.connect(self._on_select_dir)
+        output_layout.addWidget(self._select_dir_btn)
+        layout.addLayout(output_layout)
+
+        # Botón fragmentar + progreso
+        action_group = QGroupBox()
+        action_layout = QVBoxLayout(action_group)
+
+        btn_row = QHBoxLayout()
+        self._fragment_btn = QPushButton("\u2702  FRAGMENTAR PDF")
+        self._fragment_btn.setFont(get_font("button_lg"))
+        self._fragment_btn.setFixedHeight(44)
+        self._fragment_btn.clicked.connect(self._vm.start_fragmentation)
+        btn_row.addWidget(self._fragment_btn)
+
+        self._progress = QProgressBar()
+        self._progress.setVisible(False)
+        btn_row.addWidget(self._progress, stretch=1)
+        action_layout.addLayout(btn_row)
+
+        self._status_label = QLabel("")
+        self._status_label.setFont(get_font("body_sm"))
+        self._status_label.setStyleSheet(
+            f"color: {self._palette['text_secondary']};"
+        )
+        action_layout.addWidget(self._status_label)
+
+        layout.addWidget(action_group)
+
+        # Consola de fragmentación
+        self._console = LogConsole(title="CONSOLA DE FRAGMENTACIÓN")
+        layout.addWidget(self._console)
+
+        # Tabla de foliación mapeada
+        table_group = QGroupBox("Detalle de Foliación Mapeada (Excel vs PDF)")
+        table_layout = QVBoxLayout(table_group)
+        self._table = DataTable(
+            columns=["Fila", "Registro", "Folios", "Rango PDF", "Estado", "Escribano"],
+            field_map=["fila", "registro", "folios", "pg_pdf", "estado", "escribano"],
+        )
+        table_layout.addWidget(self._table)
+        layout.addWidget(table_group, stretch=1)
+
+    def _connect_signals(self):
+        self._vm.fragment_started.connect(self._on_started)
+        self._vm.fragment_progress.connect(self._on_progress)
+        self._vm.fragment_finished.connect(self._on_finished)
+        self._vm.fragment_error.connect(self._on_error)
+        self._state.records_changed.connect(self._refresh_table)
+
+        # Row click -> navigate PDF page
+        self._table.row_clicked.connect(self._on_row_clicked)
+
+    def _on_row_clicked(self, row: int, record):
+        if not hasattr(record, 'pg_pdf') or not record.pg_pdf:
+            return
+        try:
+            first_page = int(record.pg_pdf.split('-')[0])
+            self._state.pdf_current_page = first_page
+            main_window = self.window()
+            if hasattr(main_window, '_render_current_page'):
+                main_window._render_current_page()
+        except (ValueError, IndexError):
+            pass
+
+    def _on_select_dir(self):
+        path = QFileDialog.getExistingDirectory(self, "Directorio de salida")
+        if path:
+            self._vm.set_output_dir(path)
+            self._output_label.setText(path)
+
+    def _on_started(self):
+        self._fragment_btn.setEnabled(False)
+        self._fragment_btn.setText("\u23F3 Procesando...")
+        self._progress.setVisible(True)
+        self._progress.setValue(0)
+        self._console.clear()
+        self._console.set_status("PROCESANDO", "WARN")
+
+    def _on_progress(self, current: int, total: int, record_id: str):
+        pct = int((current / total) * 100) if total > 0 else 0
+        self._progress.setValue(pct)
+        self._status_label.setText(
+            f"Procesando registro {current}/{total} ({record_id})..."
+        )
+
+    def _on_finished(self, result):
+        self._fragment_btn.setText("\u2713 Completado")
+        self._progress.setValue(100)
+        self._console.set_status("COMPLETADO", "SUCCESS")
+        self._status_label.setText(
+            f"\u2713 {result.total_exitos} fragmentos creados, "
+            f"{result.total_fallos} errores."
+        )
+
+        QTimer.singleShot(3000, self._reset_button)
+        self._refresh_table()
+
+    def _on_error(self, error_msg: str):
+        self._fragment_btn.setText("\u2717 Error")
+        self._fragment_btn.setEnabled(True)
+        self._progress.setVisible(False)
+        self._console.set_status("ERROR", "ERR")
+
+        QTimer.singleShot(3000, self._reset_button)
+
+    def _reset_button(self):
+        self._fragment_btn.setText("\u2702  FRAGMENTAR PDF")
+        self._fragment_btn.setEnabled(True)
+        self._progress.setVisible(False)
+
+    def _refresh_table(self):
+        self._table.load_data(self._state.records)
