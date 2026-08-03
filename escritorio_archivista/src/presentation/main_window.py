@@ -55,6 +55,8 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
         self.resize(1400, 850)
 
+        self._preview_pdf_path = None
+
         self._setup_ui()
         self._setup_shortcuts()
         self._connect_signals()
@@ -98,6 +100,7 @@ class MainWindow(QMainWindow):
             Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
         )
         self._pdf_preview = PDFPreview()
+        self._pdf_preview.set_renderer(self._render_pdf_page)
         self._pdf_dock.setWidget(self._pdf_preview)
         self._pdf_dock.setMinimumWidth(320)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._pdf_dock)
@@ -167,6 +170,7 @@ class MainWindow(QMainWindow):
         # State signals
         self._state.logs_changed.connect(self._on_logs_changed)
         self._state.pdf_changed.connect(self._on_pdf_state_changed)
+        self._state.theme_changed.connect(self._on_theme_changed)
 
     def _on_dual_view_toggled(self, visible: bool):
         """Muestra/oculta la vista previa del PDF."""
@@ -178,6 +182,21 @@ class MainWindow(QMainWindow):
         self._state.dark_mode = dark
         self.setStyleSheet(generate_stylesheet(dark))
         self._state.add_log("INFO", f"Tema cambiado a {'oscuro' if dark else 'claro'}.")
+
+    def _on_theme_changed(self, dark: bool):
+        """Propaga el cambio de tema a vistas y widgets con estilos inline."""
+        self._apply_theme(self._sidebar, dark)
+        self._apply_theme(self._header, dark)
+        self._apply_theme(self._pdf_preview, dark)
+        for idx in self._views.values():
+            self._apply_theme(self._stack.widget(idx), dark)
+
+    @staticmethod
+    def _apply_theme(widget: QWidget, dark: bool):
+        """Invoca ``apply_theme`` en un widget si lo implementa."""
+        apply = getattr(widget, 'apply_theme', None)
+        if apply is not None:
+            apply(dark)
 
     def _on_save(self):
         """Guarda la sesión actual."""
@@ -191,14 +210,16 @@ class MainWindow(QMainWindow):
             self._state.add_log("ERR", f"Error al guardar sesión: {e}")
 
     def _on_page_changed(self, page: int):
-        """Actualiza la página del PDF en el estado."""
-        self._state.pdf_current_page = page
-        self._render_current_page()
+        """Actualiza la página del PDF en el estado (el preview maneja el render)."""
+        self._syncing_from_preview = True
+        try:
+            self._state.pdf_current_page = page
+        finally:
+            self._syncing_from_preview = False
 
     def _on_zoom_changed(self, zoom: int):
-        """Actualiza el zoom del PDF."""
+        """Actualiza el zoom del PDF (el preview maneja el render)."""
         self._state.pdf_zoom = zoom
-        self._render_current_page()
 
     def _on_logs_changed(self):
         """Los logs se manejan en Python logging, no en UI."""
@@ -206,22 +227,28 @@ class MainWindow(QMainWindow):
 
     def _on_pdf_state_changed(self):
         """Actualiza la vista previa cuando cambia el estado del PDF."""
+        if self._state.pdf_path != self._preview_pdf_path:
+            self._preview_pdf_path = self._state.pdf_path
+            self._pdf_preview.reset_document()
         self._pdf_preview.set_total_pages(self._state.pdf_total_pages)
-        self._pdf_preview.set_current_page(self._state.pdf_current_page)
+        if not getattr(self, '_syncing_from_preview', False):
+            self._pdf_preview.set_current_page(self._state.pdf_current_page)
 
-    def _render_current_page(self):
-        """Renderiza la página actual del PDF."""
+    def _render_pdf_page(self, page: int, zoom: int):
+        """Renderer para el preview continuo: devuelve PNG o None."""
         if not self._state.pdf_path:
-            return
+            return None
         try:
-            png_bytes = self._container.pdf_service.renderizar_pagina(
-                self._state.pdf_path,
-                self._state.pdf_current_page,
-                self._state.pdf_zoom,
+            return self._container.pdf_service.renderizar_pagina(
+                self._state.pdf_path, page, zoom,
             )
-            self._pdf_preview.set_page_image(png_bytes)
         except Exception as e:
             logger.error("Error renderizando PDF: %s", e)
+            return None
+
+    def _render_current_page(self):
+        """Compat: desplaza la vista previa a la página actual del estado."""
+        self._pdf_preview.set_current_page(self._state.pdf_current_page)
 
     @property
     def pdf_preview(self) -> PDFPreview:

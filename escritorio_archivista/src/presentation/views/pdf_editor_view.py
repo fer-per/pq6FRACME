@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QGridLayout, QSizePolicy, QToolBar,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QObject, QRunnable, QThreadPool, Slot
 from PySide6.QtGui import QPixmap, QImage, QColor, QPainter
 
 from src.application.container import Container
@@ -18,6 +18,29 @@ from src.presentation.theme.fonts import get_font
 from src.presentation.constants import PDF_THUMBNAIL_WIDTH, PDF_THUMBNAIL_HEIGHT
 
 logger = logging.getLogger(__name__)
+
+
+class _ThumbnailRenderTask(QRunnable):
+    """Renderiza un thumbnail en segundo plano sin bloquear la UI."""
+
+    class Signals(QObject):
+        rendered = Signal(int, object, int)  # page, png_bytes, doc_id
+
+    def __init__(self, renderer, page: int, doc_id: int):
+        super().__init__()
+        self.signals = self.Signals()
+        self._renderer = renderer
+        self._page = page
+        self._doc_id = doc_id
+
+    @Slot()
+    def run(self):
+        try:
+            data = self._renderer(self._page)
+            if data:
+                self.signals.rendered.emit(self._page, data, self._doc_id)
+        except Exception as e:
+            logger.debug("Error renderizando thumbnail pág %d: %s", self._page, e)
 
 
 class ThumbnailWidget(QWidget):
@@ -98,6 +121,23 @@ class ThumbnailWidget(QWidget):
         self._selected = selected
         self._update_style()
 
+    def apply_theme(self, dark: bool):
+        """Reaplica los colores del thumbnail al cambiar el tema."""
+        self._palette = get_palette(dark)
+        self._image_label.setStyleSheet(
+            f"background-color: {self._palette['surface_high']}; "
+            f"border: 1px solid {self._palette['outline_variant']}; "
+            f"border-radius: 4px;"
+        )
+        self._page_label.setStyleSheet(
+            f"color: {self._palette['text_primary']}; background: transparent;"
+        )
+        color = self._palette['success'] if self._active else self._palette['error']
+        self._status_label.setStyleSheet(
+            f"color: {color}; background: transparent;"
+        )
+        self._update_style()
+
     def _update_style(self):
         if self._selected:
             border = f"2px solid {self._palette['primary']}"
@@ -130,6 +170,14 @@ class PDFEditorView(QWidget):
         self._palette = get_palette()
         self._thumbnails: list[ThumbnailWidget] = []
         self._selected_page = None
+        self._doc_id = 0
+        self._pending: set = set()
+        self._rendered: set = set()
+        self._thumb_tops: dict = {}
+        self._thread_pool = QThreadPool(self)
+        self._thread_pool.setMaxThreadCount(2)
+        self._last_total = 0
+        self._last_path = None
         self._setup_ui()
         self._connect_signals()
 
@@ -146,6 +194,7 @@ class PDFEditorView(QWidget):
             f"border-bottom: 1px solid {self._palette['outline_variant']}; "
             f"padding: 4px;"
         )
+        self._toolbar = toolbar
 
         self._move_up_btn = QPushButton("\u25B2 Mover Arriba")
         self._move_up_btn.setProperty("flat", True)
@@ -192,6 +241,8 @@ class PDFEditorView(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet(f"background-color: {self._palette['surface_low']}; border: none;")
+        self._scroll = scroll
+        scroll.verticalScrollBar().valueChanged.connect(self._render_visible)
 
         self._grid_widget = QWidget()
         self._grid_layout = QGridLayout(self._grid_widget)
@@ -207,17 +258,30 @@ class PDFEditorView(QWidget):
         self._state.pdf_changed.connect(self._on_pdf_changed)
 
     def _on_pdf_changed(self):
-        if self._state.pdf_total_pages > 0:
+        # Reconstruye solo cuando cambia el documento (path o nº de páginas),
+        # no en cada cambio de página, para no perder las miniaturas.
+        total = self._state.pdf_total_pages
+        path = self._state.pdf_path
+        if total > 0 and (total != self._last_total or path != self._last_path):
+            self._last_total = total
+            self._last_path = path
             self._create_thumbnails()
 
     def _create_thumbnails(self):
         for thumb in self._thumbnails:
             thumb.deleteLater()
         self._thumbnails.clear()
+        self._doc_id += 1
+        self._pending.clear()
+        self._rendered.clear()
+        self._thumb_tops.clear()
 
         active_pages = self._vm.get_active_pages()
         total = self._state.pdf_total_pages
         cols = 4
+        thumb_w = PDF_THUMBNAIL_WIDTH + 10
+        thumb_h = PDF_THUMBNAIL_HEIGHT + 30
+        spacing = 8
 
         for i in range(total):
             page = i + 1
@@ -230,15 +294,51 @@ class PDFEditorView(QWidget):
             col = i % cols
             self._grid_layout.addWidget(thumb, row, col)
             self._thumbnails.append(thumb)
+            self._thumb_tops[page] = row * (thumb_h + spacing)
 
-            if i < 20 and self._state.pdf_path:
-                try:
-                    png = self._container.pdf_service.renderizar_pagina(
-                        self._state.pdf_path, page, zoom=30,
-                    )
-                    thumb.set_image(png)
-                except Exception as e:
-                    logger.debug("Error renderizando thumbnail pág %d: %s", page, e)
+        # El widget de contenido debe crecer por su contenido para que el
+        # QScrollArea active la barra vertical (widgetResizable=True fuerza
+        # el alto al viewport, por lo que la altura mínima marca el rango).
+        rows = (total + cols - 1) // cols
+        content_h = rows * (thumb_h + spacing) - spacing + 24
+        self._grid_widget.setMinimumSize(cols * thumb_w + (cols - 1) * spacing + 24, content_h)
+
+        # Renderiza solo lo visible; el scroll completa el resto
+        self._render_visible()
+
+    def _render_visible(self):
+        """Renderiza en segundo plano los thumbnails cercanos al viewport."""
+        if not self._state.pdf_path or not self._thumbnails:
+            return
+        sb = self._scroll.verticalScrollBar()
+        y0 = sb.value() - 300
+        y1 = sb.value() + self._scroll.viewport().height() + 300
+
+        for thumb in self._thumbnails:
+            if thumb.page_num in self._pending or thumb.page_num in self._rendered:
+                continue
+            top = self._thumb_tops.get(thumb.page_num, 0)
+            bottom = top + PDF_THUMBNAIL_HEIGHT + 30
+            if bottom < y0 or top > y1:
+                continue
+            self._pending.add(thumb.page_num)
+            page = thumb.page_num
+            task = _ThumbnailRenderTask(
+                lambda p=page: self._container.pdf_service.renderizar_pagina(
+                    self._state.pdf_path, p, zoom=30,
+                ),
+                page,
+                self._doc_id,
+            )
+            task.signals.rendered.connect(self._on_thumbnail_rendered)
+            self._thread_pool.start(task)
+
+    def _on_thumbnail_rendered(self, page: int, data: bytes, doc_id: int):
+        if doc_id != self._doc_id or page > len(self._thumbnails):
+            return
+        self._pending.discard(page)
+        self._rendered.add(page)
+        self._thumbnails[page - 1].set_image(data)
 
     def _on_thumbnail_clicked(self, page: int):
         self._selected_page = page
@@ -275,3 +375,17 @@ class PDFEditorView(QWidget):
         active_pages = self._vm.get_active_pages()
         for thumb in self._thumbnails:
             thumb.set_active(thumb.page_num in active_pages)
+
+    def apply_theme(self, dark: bool):
+        """Reaplica el tema al toolbar y a los thumbnails."""
+        self._palette = get_palette(dark)
+        self._toolbar.setStyleSheet(
+            f"background-color: {self._palette['surface_container']}; "
+            f"border-bottom: 1px solid {self._palette['outline_variant']}; "
+            f"padding: 4px;"
+        )
+        self._scroll.setStyleSheet(
+            f"background-color: {self._palette['surface_low']}; border: none;"
+        )
+        for thumb in self._thumbnails:
+            thumb.apply_theme(dark)

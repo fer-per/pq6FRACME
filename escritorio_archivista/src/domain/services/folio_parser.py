@@ -25,6 +25,8 @@ def parse_folios(folio_str: str) -> Optional[FolioTuple]:
     if not folio_str or not isinstance(folio_str, str):
         return None
     folio_str = folio_str.strip().lower()
+    # Normalizar espacios alrededor del guion: "99v - 100v" -> "99v-100v"
+    folio_str = re.sub(r'\s+', '', folio_str)
 
     # Intentar rango: "NNNr-NNNv"
     rango_match = re.match(r'(\d+)([rv])?-(\d+)([rv])?', folio_str)

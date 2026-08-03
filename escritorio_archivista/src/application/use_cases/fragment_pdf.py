@@ -69,70 +69,76 @@ class FragmentarPDFUseCase:
         pendientes: List[dict] = []
         total = len(records)
 
-        for i, record in enumerate(records):
-            # Notificar progreso
-            if on_progress:
-                on_progress(i + 1, total, record.id)
+        # Abrir el PDF maestro una sola vez para evitar re-cargarlo
+        # completo en memoria por cada registro (causa de consumos elevados).
+        lector = self._pdf_service.abrir(pdf_path)
+        try:
+            for i, record in enumerate(records):
+                # Notificar progreso
+                if on_progress:
+                    on_progress(i + 1, total, record.id)
 
-            # Omitir registros marcados como REVISAR
-            if record.estado == "REVISAR":
-                pendientes.append({
-                    "ID": record.id,
-                    "Fila": record.fila,
-                    "Registro": record.registro,
-                    "Escribano": record.escribano,
-                    "Folios": record.folios,
-                    "Motivo": "Estado REVISAR — errores sin corregir",
-                })
-                logger.warning("Omitido %s: estado REVISAR.", record.id)
-                continue
+                # Omitir registros marcados como REVISAR
+                if record.estado == "REVISAR":
+                    pendientes.append({
+                        "ID": record.id,
+                        "Fila": record.fila,
+                        "Registro": record.registro,
+                        "Escribano": record.escribano,
+                        "Folios": record.folios,
+                        "Motivo": "Estado REVISAR — errores sin corregir",
+                    })
+                    logger.warning("Omitido %s: estado REVISAR.", record.id)
+                    continue
 
-            # Calcular páginas
-            pages = mapper.folio_str_to_pdf_pages(record.folios)
-            if not pages:
-                pendientes.append({
-                    "ID": record.id,
-                    "Fila": record.fila,
-                    "Registro": record.registro,
-                    "Escribano": record.escribano,
-                    "Folios": record.folios,
-                    "Motivo": "Folios no resuelven a páginas PDF",
-                })
-                errores.append(
-                    f"Error en {record.id}: folios '{record.folios}' "
-                    "no resuelven a páginas PDF."
-                )
-                continue
+                # Calcular páginas
+                pages = mapper.folio_str_to_pdf_pages(record.folios)
+                if not pages:
+                    pendientes.append({
+                        "ID": record.id,
+                        "Fila": record.fila,
+                        "Registro": record.registro,
+                        "Escribano": record.escribano,
+                        "Folios": record.folios,
+                        "Motivo": "Folios no resuelven a páginas PDF",
+                    })
+                    errores.append(
+                        f"Error en {record.id}: folios '{record.folios}' "
+                        "no resuelven a páginas PDF."
+                    )
+                    continue
 
-            # Construir ruta de destino
-            try:
-                dest_path = self._hierarchy_builder.construir_ruta(
-                    record, output_dir, acervo_num,
-                )
+                # Construir ruta de destino
+                try:
+                    dest_path = self._hierarchy_builder.construir_ruta(
+                        record, output_dir, acervo_num,
+                    )
 
-                # Crear directorio padre
-                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                    # Crear directorio padre
+                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
-                # Extraer páginas
-                self._pdf_service.extraer_paginas(pdf_path, pages, dest_path)
+                    # Extraer páginas (reutilizando el lector abierto)
+                    self._pdf_service.extraer_paginas(lector, pages, dest_path)
 
-                archivos_creados.append(InfoArchivo(
-                    path=dest_path,
-                    filename=os.path.basename(dest_path),
-                ))
+                    archivos_creados.append(InfoArchivo(
+                        path=dest_path,
+                        filename=os.path.basename(dest_path),
+                    ))
 
-                # Marcar como fragmentado
-                record.estado = "FRAGMENTADO"
+                    # Marcar como fragmentado
+                    record.estado = "FRAGMENTADO"
 
-                logger.info(
-                    "Extraído %s → %s (%d págs)",
-                    record.id, os.path.basename(dest_path), len(pages),
-                )
+                    logger.info(
+                        "Extraído %s → %s (%d págs)",
+                        record.id, os.path.basename(dest_path), len(pages),
+                    )
 
-            except Exception as e:
-                error_msg = f"Error en {record.id}: {str(e)}"
-                errores.append(error_msg)
-                logger.error(error_msg)
+                except Exception as e:
+                    error_msg = f"Error en {record.id}: {str(e)}"
+                    errores.append(error_msg)
+                    logger.error(error_msg)
+        finally:
+            self._pdf_service.cerrar(lector)
 
         # Generar CSV de pendientes
         if pendientes:

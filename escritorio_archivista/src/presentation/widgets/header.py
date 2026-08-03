@@ -45,10 +45,12 @@ class Header(QWidget):
         title = QLabel("Escritorio Archivista")
         title.setFont(get_font("title_md"))
         title.setStyleSheet(f"color: {self._palette['primary']}; background: transparent;")
+        self._title_label = title
         layout.addWidget(title)
 
         sep = QLabel("\u2502")
         sep.setStyleSheet(f"color: {self._palette['outline_variant']}; background: transparent;")
+        self._sep_label = sep
         layout.addWidget(sep)
 
         subtitle = QLabel("Sistema de Gestión y Fragmentación Documental")
@@ -56,6 +58,7 @@ class Header(QWidget):
         subtitle.setStyleSheet(
             f"color: {self._palette['text_secondary']}; background: transparent;"
         )
+        self._subtitle_label = subtitle
         layout.addWidget(subtitle)
 
         layout.addStretch()
@@ -97,3 +100,20 @@ class Header(QWidget):
         self._dark_mode = not self._dark_mode
         self._theme_btn.setText("\u2600" if self._dark_mode else "\u263D")
         self.theme_toggled.emit(self._dark_mode)
+
+    def apply_theme(self, dark: bool):
+        """Reaplica los estilos dependientes del tema."""
+        self._palette = get_palette(dark)
+        self.setStyleSheet(
+            f"background-color: {self._palette['surface']}; "
+            f"border-bottom: 1px solid {self._palette['outline_variant']};"
+        )
+        self._title_label.setStyleSheet(
+            f"color: {self._palette['primary']}; background: transparent;"
+        )
+        self._sep_label.setStyleSheet(
+            f"color: {self._palette['outline_variant']}; background: transparent;"
+        )
+        self._subtitle_label.setStyleSheet(
+            f"color: {self._palette['text_secondary']}; background: transparent;"
+        )

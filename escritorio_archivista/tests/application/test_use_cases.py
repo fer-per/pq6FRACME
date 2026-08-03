@@ -143,6 +143,7 @@ class TestCargarInventarioUseCase:
 
     def test_carga_con_mock(self):
         mock_repo = MagicMock()
+        mock_repo.detectar_fila_inicio_datos.return_value = None
         mock_repo.extraer_metadatos.return_value = {
             "filepath": "test.xlsx",
             "siglo": "XIX",
@@ -154,22 +155,63 @@ class TestCargarInventarioUseCase:
         ]
 
         uc = CargarInventarioUseCase(mock_repo)
-        result = uc.ejecutar("test.xlsx", fila_inicio=10, fila_fin=500)
+        result = uc.ejecutar(
+            "test.xlsx", fila_datos_inicio=10, fila_inicio=10, fila_fin=500
+        )
 
         assert isinstance(result, ResultadoCarga)
         assert len(result.records) == 2
         assert result.metadata["total_records"] == 2
-        mock_repo.cargar_registros.assert_called_once()
+        assert result.metadata["fila_datos_inicio"] == 10
+        mock_repo.cargar_registros.assert_called_once_with(
+            "test.xlsx", 10, 10, 500
+        )
+
+    def test_auto_detect_sobreescribe_fila_inicio(self):
+        mock_repo = MagicMock()
+        mock_repo.detectar_fila_inicio_datos.return_value = 12
+        mock_repo.extraer_metadatos.return_value = {"filepath": "t.xlsx", "siglo": "", "acervo_num": "7"}
+        mock_repo.cargar_registros.return_value = []
+
+        uc = CargarInventarioUseCase(mock_repo)
+        result = uc.ejecutar(
+            "t.xlsx", fila_datos_inicio=10, fila_inicio=10, fila_fin=500
+        )
+
+        assert result.metadata["fila_datos_inicio"] == 12
+        mock_repo.cargar_registros.assert_called_once_with(
+            "t.xlsx", 12, 10, 500
+        )
+
+    def test_auto_detect_deshabilitado_no_sobreescribe(self):
+        mock_repo = MagicMock()
+        mock_repo.detectar_fila_inicio_datos.return_value = 12
+        mock_repo.extraer_metadatos.return_value = {"filepath": "t.xlsx", "siglo": "", "acervo_num": "7"}
+        mock_repo.cargar_registros.return_value = []
+
+        uc = CargarInventarioUseCase(mock_repo)
+        result = uc.ejecutar(
+            "t.xlsx", fila_datos_inicio=10, fila_inicio=10, fila_fin=500,
+            auto_detect=False,
+        )
+
+        assert result.metadata["fila_datos_inicio"] == 10
+        mock_repo.cargar_registros.assert_called_once_with(
+            "t.xlsx", 10, 10, 500
+        )
 
     def test_carga_con_errores_marca_revisar(self):
         mock_repo = MagicMock()
+        mock_repo.detectar_fila_inicio_datos.return_value = None
         mock_repo.extraer_metadatos.return_value = {"filepath": "t.xlsx", "siglo": "", "acervo_num": "7"}
         mock_repo.cargar_registros.return_value = [
             _rec(id="#0001", folios="abc"),  # Formato inválido
         ]
 
         uc = CargarInventarioUseCase(mock_repo)
-        result = uc.ejecutar("t.xlsx", fila_inicio=10, fila_fin=500)
+        result = uc.ejecutar(
+            "t.xlsx", fila_datos_inicio=12, fila_inicio=12, fila_fin=500
+        )
 
         assert len(result.errors) >= 1
         revisar = [r for r in result.records if r.estado == "REVISAR"]

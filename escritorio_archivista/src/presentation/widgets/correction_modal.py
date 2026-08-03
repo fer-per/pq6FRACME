@@ -29,10 +29,11 @@ class CorrectionModal(QDialog):
 
     correction_accepted = Signal(str, str)  # (record_id, new_folios)
 
-    def __init__(self, suggestion: SugerenciaCorreccion, parent=None):
+    def __init__(self, suggestion: SugerenciaCorreccion, parent=None,
+                 dark: bool = False):
         super().__init__(parent)
         self._suggestion = suggestion
-        self._palette = get_palette()
+        self._palette = get_palette(dark)
         self.setWindowTitle(f"⚠️ Corrección — {suggestion.registro_id}")
         self.setMinimumWidth(600)
         self.setModal(True)

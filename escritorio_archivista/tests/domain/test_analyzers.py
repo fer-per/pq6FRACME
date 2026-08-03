@@ -15,12 +15,12 @@ from src.domain.services.folio_mapper import FolioMapper
 def _rec(
     id: str = "#0001", fila: int = 10, folios: str = "001r-002v",
     data_topica: str = "Ciudad", fecha_inicio: str = "15/03/1891",
-    pg_pdf: str = "1-4", **kwargs
+    pg_pdf: str = "1-4", protocolo: str = "1", **kwargs
 ) -> InventoryRecord:
     """Factory helper para registros de prueba."""
     return InventoryRecord(
         id=id, fila=fila, registro="001", escribano="García",
-        protocolo="1", folios=folios, pg_pdf=pg_pdf, titulo="Compraventa",
+        protocolo=protocolo, folios=folios, pg_pdf=pg_pdf, titulo="Compraventa",
         data_topica=data_topica, fecha_inicio=fecha_inicio, **kwargs,
     )
 
@@ -90,6 +90,36 @@ class TestFolioAnalyzer:
         result = analizar_folios([])
         assert result.ok
         assert result.total_revisados == 0
+
+    def test_folios_se_reinician_por_protocolo(self):
+        records = [
+            _rec(id="#0001", folios="001r-002v", protocolo="1"),
+            _rec(id="#0002", fila=11, folios="003r-004v", protocolo="1"),
+            _rec(id="#0003", fila=12, folios="001r-002v", protocolo="2"),
+            _rec(id="#0004", fila=13, folios="003r-004v", protocolo="2"),
+        ]
+        result = analizar_folios(records)
+        assert result.ok
+        assert len(result.errores) == 0
+        assert len(result.advertencias) == 0
+
+    def test_repetido_dentro_del_mismo_protocolo(self):
+        records = [
+            _rec(id="#0001", folios="001r-002v", protocolo="2"),
+            _rec(id="#0002", fila=11, folios="001r-003v", protocolo="2"),
+        ]
+        result = analizar_folios(records)
+        assert len(result.errores) == 1
+        assert result.errores[0].tipo == "REPETIDO"
+
+    def test_cambio_de_protocolo_reinicia_secuencia_esperada(self):
+        records = [
+            _rec(id="#0001", folios="115v-117v", protocolo="1"),
+            _rec(id="#0002", fila=11, folios="117r-117v", protocolo="2"),
+        ]
+        result = analizar_folios(records)
+        # El protocolo 2 reinicia: 117r < 117v no debe generar SOLAPAMIENTO
+        assert result.ok
 
 
 # ═══════════════════════════════════════════════════════════════

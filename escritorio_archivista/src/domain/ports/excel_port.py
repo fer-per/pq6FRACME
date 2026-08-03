@@ -17,6 +17,7 @@ class ExcelRepositoryPort(ABC):
     def cargar_registros(
         self,
         ruta: str,
+        fila_datos_inicio: int,
         fila_inicio: int,
         fila_fin: int,
     ) -> List[InventoryRecord]:
@@ -25,8 +26,10 @@ class ExcelRepositoryPort(ABC):
 
         Args:
             ruta: Ruta al archivo .xlsx.
-            fila_inicio: Fila de inicio (basada en el Excel, incluyendo offset).
-            fila_fin: Fila de fin.
+            fila_datos_inicio: Fila 1-based del Excel donde empiezan los datos.
+                Determina cuántas filas saltar y el offset de numeración.
+            fila_inicio: Fila de inicio del rango a incluir.
+            fila_fin: Fila de fin del rango a incluir.
 
         Returns:
             Lista de InventoryRecord.
@@ -34,14 +37,33 @@ class ExcelRepositoryPort(ABC):
         ...
 
     @abstractmethod
-    def extraer_metadatos(self, ruta: str) -> dict:
+    def extraer_metadatos(self, ruta: str, fila_datos_inicio: int) -> dict:
         """
         Extrae metadatos globales del Excel (siglo, acervo, etc.).
 
         Args:
             ruta: Ruta al archivo .xlsx.
+            fila_datos_inicio: Fila 1-based donde empiezan los datos; limita
+                la lectura a las filas de cabecera.
 
         Returns:
             Dict con claves: "siglo", "acervo_num", "filepath".
+        """
+        ...
+
+    @abstractmethod
+    def detectar_fila_inicio_datos(self, ruta: str) -> Optional[int]:
+        """
+        Detecta la fila 1-based del Excel donde empiezan los datos.
+
+        Localiza la primera fila que parece encabezado de columna
+        (contiene nombres como registro/escribano/protocolo/folios)
+        y devuelve la fila de inicio de datos = encabezado + HEADER_ROWS.
+
+        Args:
+            ruta: Ruta al archivo .xlsx.
+
+        Returns:
+            Fila 1-based donde empiezan los datos, o None si no se detecta.
         """
         ...

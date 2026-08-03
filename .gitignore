@@ -11,3 +11,7 @@ docs/
 
 # Salida de fragmentacion
 **/output/
+
+# Datos de catalogo (archivos Excel grandes de entrada)
+*.xlsx
+*.xls

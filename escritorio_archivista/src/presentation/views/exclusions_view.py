@@ -16,6 +16,7 @@ from src.application.container import Container
 from src.presentation.viewmodels.app_state import AppStateVM
 from src.presentation.viewmodels.exclusions_vm import ExclusionsVM
 from src.presentation.widgets.data_table import DataTable
+from src.presentation.constants import MODULE_ICONS
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
 
@@ -39,14 +40,31 @@ class ExclusionsView(QWidget):
         layout.setSpacing(12)
 
         # Título
-        title = QLabel("\u2691  Saltos, Exclusiones y Segmentos")
+        title = QLabel(f"{MODULE_ICONS['exclusions']}  Saltos, Exclusiones y Segmentos")
         title.setProperty("heading", True)
         layout.addWidget(title)
 
-        # Splitter principal: Izquierda = Formularios y Exclusiones; Derecha = Vista del Excel
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        # Splitter vertical: Arriba = Referencia del Excel; Abajo = Exclusiones Activas
+        splitter = QSplitter(Qt.Orientation.Vertical)
 
-        # ─── PANEL IZQUIERDO: FORMULARIOS Y EXCLUSIONES ───────
+        # ─── PANEL SUPERIOR: REFERENCIA DEL INVENTARIO EXCEL ──
+        right_group = QGroupBox("Referencia del Inventario Excel")
+        right_layout = QVBoxLayout(right_group)
+
+        tip_label = QLabel("\u2139 Haz clic en cualquier fila para previsualizar su página PDF")
+        tip_label.setFont(get_font("body_xs"))
+        tip_label.setStyleSheet(f"color: {self._palette['text_secondary']};")
+        self._tip_label = tip_label
+        right_layout.addWidget(tip_label)
+
+        self._excel_table = DataTable(
+            columns=["Fila", "Registro", "Folios", "Pág. PDF", "Escribano"],
+            field_map=["fila", "registro", "folios", "pg_pdf", "escribano"],
+        )
+        right_layout.addWidget(self._excel_table)
+        splitter.addWidget(right_group)
+
+        # ─── PANEL INFERIOR: FORMULARIOS Y EXCLUSIONES ────────
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -151,24 +169,8 @@ class ExclusionsView(QWidget):
         left_layout.addWidget(excl_group, stretch=1)
         splitter.addWidget(left_widget)
 
-        # ─── PANEL DERECHO: REFERENCIA DEL EXCEL ───────────────
-        right_group = QGroupBox("Referencia del Inventario Excel")
-        right_layout = QVBoxLayout(right_group)
-
-        tip_label = QLabel("\u2139 Haz clic en cualquier fila para previsualizar su página PDF")
-        tip_label.setFont(get_font("body_xs"))
-        tip_label.setStyleSheet(f"color: {self._palette['text_secondary']};")
-        right_layout.addWidget(tip_label)
-
-        self._excel_table = DataTable(
-            columns=["Fila", "Registro", "Folios", "Pág. PDF", "Escribano"],
-            field_map=["fila", "registro", "folios", "pg_pdf", "escribano"],
-        )
-        right_layout.addWidget(self._excel_table)
-        splitter.addWidget(right_group)
-
-        # Proporciones 55% / 45%
-        splitter.setSizes([550, 450])
+        # Proporciones: Excel arriba (45%), formularios/exclusiones abajo (55%)
+        splitter.setSizes([450, 550])
         layout.addWidget(splitter, stretch=1)
 
     def _connect_signals(self):
@@ -227,3 +229,12 @@ class ExclusionsView(QWidget):
 
     def _refresh_excel_table(self):
         self._excel_table.load_data(self._state.records)
+
+    def apply_theme(self, dark: bool):
+        """Reaplica el tema a las tablas y etiquetas de la vista."""
+        self._palette = get_palette(dark)
+        self._tip_label.setStyleSheet(
+            f"color: {self._palette['text_secondary']};"
+        )
+        self._excl_table.apply_theme(dark)
+        self._excel_table.apply_theme(dark)

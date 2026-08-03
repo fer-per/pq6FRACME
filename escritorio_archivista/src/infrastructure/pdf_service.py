@@ -20,43 +20,71 @@ class PDFService(PDFServicePort):
 
         logger.info("Obteniendo total de páginas de: %s", ruta)
         reader = PdfReader(ruta)
-        total = len(reader.pages)
-        logger.info("Total de páginas: %d", total)
-        return total
+        try:
+            total = len(reader.pages)
+            logger.info("Total de páginas: %d", total)
+            return total
+        finally:
+            reader.close()
+
+    def abrir(self, ruta: str) -> Any:
+        """Abre el PDF maestro una sola vez para reutilizarlo en la extracción."""
+        from pypdf import PdfReader
+
+        logger.info("Abriendo PDF maestro: %s", ruta)
+        return PdfReader(ruta)
+
+    def cerrar(self, lector: Any) -> None:
+        """Cierra el lector abierto con ``abrir``."""
+        if lector is None:
+            return
+        try:
+            lector.close()
+            logger.debug("PDF maestro cerrado.")
+        except Exception as e:
+            logger.warning("Error al cerrar PDF maestro: %s", e)
 
     def extraer_paginas(
         self,
-        ruta_origen: str,
+        lector: Any,
         paginas: List[int],
         ruta_destino: str,
     ) -> None:
-        """Extrae páginas específicas del PDF usando pypdf."""
-        from pypdf import PdfReader, PdfWriter
+        """Extrae páginas de un lector ya abierto usando pypdf."""
+        from pypdf import PdfWriter
 
         logger.info(
-            "Extrayendo páginas %s de %s → %s",
-            paginas, ruta_origen, ruta_destino,
+            "Extrayendo páginas %s → %s",
+            paginas, ruta_destino,
         )
 
-        reader = PdfReader(ruta_origen)
-        writer = PdfWriter()
-        total_pages = len(reader.pages)
+        total_pages = len(lector.pages)
+        indices = [
+            num - 1 for num in paginas if 1 <= num <= total_pages
+        ]  # 1-based → 0-based
 
         for num_pag in paginas:
-            if 1 <= num_pag <= total_pages:
-                writer.add_page(reader.pages[num_pag - 1])  # 1-based → 0-based
-            else:
+            if num_pag < 1 or num_pag > total_pages:
                 logger.warning(
                     "Página %d fuera de rango (1-%d), omitiendo.",
                     num_pag, total_pages,
                 )
 
-        if len(writer.pages) > 0:
+        if not indices:
+            logger.warning("No se extrajeron páginas para %s.", ruta_destino)
+            return
+
+        writer = PdfWriter()
+        try:
+            writer.append(lector, pages=indices)
             with open(ruta_destino, 'wb') as f:
                 writer.write(f)
-            logger.info("Archivo creado: %s (%d páginas)", ruta_destino, len(writer.pages))
-        else:
-            logger.warning("No se extrajeron páginas para %s.", ruta_destino)
+            logger.info(
+                "Archivo creado: %s (%d páginas)",
+                ruta_destino, len(indices),
+            )
+        finally:
+            writer.close()
 
     def renderizar_pagina(
         self,

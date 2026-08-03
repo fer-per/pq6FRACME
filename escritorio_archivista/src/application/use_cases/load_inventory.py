@@ -11,6 +11,7 @@ from src.domain.ports.excel_port import ExcelRepositoryPort
 from src.domain.services.folio_mapper import mapper_from_config
 from src.domain.services.analyzers.folio_analyzer import analizar_folios
 from src.domain.services.suggestion_generator import generar_sugerencias
+from src.domain.value_objects import DEFAULT_DATA_START_ROW
 from src.application.dto import ResultadoCarga
 
 logger = logging.getLogger(__name__)
@@ -25,8 +26,9 @@ class CargarInventarioUseCase:
     def ejecutar(
         self,
         ruta_excel: str,
-        fila_inicio: int,
-        fila_fin: int,
+        fila_datos_inicio: int = DEFAULT_DATA_START_ROW,
+        fila_inicio: int = DEFAULT_DATA_START_ROW,
+        fila_fin: int = 500,
         folio_inicio: str = "001r",
         pag_pdf_inicio: int = 1,
         segmentos: Optional[list] = None,
@@ -46,12 +48,19 @@ class CargarInventarioUseCase:
         """
         logger.info("Ejecutando CargarInventarioUseCase para: %s", ruta_excel)
 
+        # 0. Detectar fila de inicio de datos si está habilitado
+        if auto_detect:
+            detected = self._excel_repo.detectar_fila_inicio_datos(ruta_excel)
+            if detected:
+                logger.info("Fila de inicio de datos detectada: %d", detected)
+                fila_datos_inicio = detected
+
         # 1. Extraer metadatos
-        metadata = self._excel_repo.extraer_metadatos(ruta_excel)
+        metadata = self._excel_repo.extraer_metadatos(ruta_excel, fila_datos_inicio)
 
         # 2. Cargar registros
         records = self._excel_repo.cargar_registros(
-            ruta_excel, fila_inicio, fila_fin,
+            ruta_excel, fila_datos_inicio, fila_inicio, fila_fin,
         )
 
         # 3. Crear mapper
@@ -86,6 +95,7 @@ class CargarInventarioUseCase:
             "errores_count": len(analysis.errores),
             "advertencias_count": len(analysis.advertencias),
             "acervo_detectado": metadata.get("acervo_num", "7"),
+            "fila_datos_inicio": fila_datos_inicio,
         })
 
         logger.info(

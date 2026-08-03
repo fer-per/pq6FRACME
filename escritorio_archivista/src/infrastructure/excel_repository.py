@@ -6,6 +6,7 @@ usando pandas + openpyxl, con mapeo inteligente de columnas.
 """
 import logging
 import re
+import unicodedata
 from typing import List, Optional
 
 import pandas as pd
@@ -13,12 +14,11 @@ import pandas as pd
 from src.domain.entities import InventoryRecord
 from src.domain.ports.excel_port import ExcelRepositoryPort
 from src.domain.value_objects import (
-    SKIPROWS,
     HEADER_ROWS,
-    EXCEL_OFFSET,
     COLUMN_ALIASES,
     FALLBACK_COLUMNS,
     SKIP_ROW_KEYWORDS,
+    ANNOTATION_KEYWORDS,
     EMPTY_VALUES,
 )
 
@@ -31,16 +31,19 @@ class ExcelRepository(ExcelRepositoryPort):
     def cargar_registros(
         self,
         ruta: str,
+        fila_datos_inicio: int,
         fila_inicio: int,
         fila_fin: int,
     ) -> List[InventoryRecord]:
         """Carga registros del inventario Excel."""
         logger.info("Cargando registros desde: %s", ruta)
 
+        skiprows = fila_datos_inicio - HEADER_ROWS - 1
+
         df = pd.read_excel(
             ruta,
-            skiprows=SKIPROWS,
-            header=[0, 1],
+            skiprows=skiprows,
+            header=list(range(HEADER_ROWS)),
             engine='openpyxl',
         )
 
@@ -58,11 +61,29 @@ class ExcelRepository(ExcelRepositoryPort):
         records: List[InventoryRecord] = []
         record_counter = 0
 
-        for idx, row in df.iterrows():
-            fila_real = int(idx) + EXCEL_OFFSET + 1
+        # Filas de anotación/instrucciones (no son datos)
+        annot = df.apply(
+            lambda row: any(
+                kw in self._safe_str(v).lower()
+                for v in row for kw in ANNOTATION_KEYWORDS
+            ),
+            axis=1,
+        ).tolist()
+
+        rows = list(df.iterrows())
+        for pos, (_, row) in enumerate(rows):
+            fila_real = fila_datos_inicio + pos
 
             # Filtrar por rango de filas
             if fila_real < fila_inicio or fila_real > fila_fin:
+                continue
+
+            # Verificar si es fila de anotación/instrucción
+            if annot[pos]:
+                continue
+
+            # Verificar si es fila de ejemplo (seguida de una anotación)
+            if pos + 1 < len(rows) and annot[pos + 1]:
                 continue
 
             # Verificar si es sub-encabezado
@@ -102,7 +123,7 @@ class ExcelRepository(ExcelRepositoryPort):
         logger.info("Cargados %d registros.", len(records))
         return records
 
-    def extraer_metadatos(self, ruta: str) -> dict:
+    def extraer_metadatos(self, ruta: str, fila_datos_inicio: int) -> dict:
         """Extrae metadatos globales del Excel."""
         logger.info("Extrayendo metadatos de: %s", ruta)
 
@@ -113,8 +134,9 @@ class ExcelRepository(ExcelRepositoryPort):
         }
 
         try:
+            nrows = max(0, fila_datos_inicio - HEADER_ROWS - 1)
             df_header = pd.read_excel(
-                ruta, header=None, nrows=SKIPROWS, engine='openpyxl'
+                ruta, header=None, nrows=nrows, engine='openpyxl'
             )
 
             for idx, row in df_header.iterrows():
@@ -140,15 +162,39 @@ class ExcelRepository(ExcelRepositoryPort):
 
         return metadatos
 
+    def detectar_fila_inicio_datos(self, ruta: str) -> Optional[int]:
+        """Detecta la fila 1-based donde empiezan los datos."""
+        keywords = ("registro", "escribano", "protocolo", "folios")
+
+        try:
+            df = pd.read_excel(
+                ruta, header=None, nrows=200, engine='openpyxl'
+            )
+        except Exception as e:
+            logger.warning("No se pudo detectar la fila de datos: %s", e)
+            return None
+
+        for idx, row in df.iterrows():
+            cells = [self._safe_str(v).lower() for v in row if v is not None]
+            non_empty = [c for c in cells if c]
+            if len(non_empty) < 3:
+                continue
+            matches = sum(1 for kw in keywords for c in non_empty if kw in c)
+            if matches >= 2:
+                return int(idx) + 1 + HEADER_ROWS
+
+        return None
+
     def _mapear_columnas(self, columnas: List[str]) -> dict:
         """Mapea nombres de columnas del Excel a campos del modelo."""
         col_map = {}
-        columnas_lower = [c.lower() for c in columnas]
+        columnas_lower = [self._sin_acentos(c.lower()) for c in columnas]
 
         for campo, aliases in COLUMN_ALIASES.items():
             for alias in aliases:
+                alias_norm = self._sin_acentos(alias)
                 for i, col_lower in enumerate(columnas_lower):
-                    if alias in col_lower:
+                    if alias_norm in col_lower:
                         col_map[campo] = i
                         break
                 if campo in col_map:
@@ -160,6 +206,14 @@ class ExcelRepository(ExcelRepositoryPort):
                 col_map[campo] = idx
 
         return col_map
+
+    @staticmethod
+    def _sin_acentos(texto: str) -> str:
+        """Elimina acentos/diacríticos para comparación insensible a acentos."""
+        return ''.join(
+            c for c in unicodedata.normalize('NFD', texto)
+            if unicodedata.category(c) != 'Mn'
+        )
 
     def _get_col(self, row, col_map: dict, campo: str) -> str:
         """Obtiene el valor de una columna mapeada como string limpio."""

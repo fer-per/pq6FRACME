@@ -77,6 +77,9 @@ class DataTable(QTableWidget):
         """
         Carga datos desde una lista de objetos (dataclasses o dicts).
 
+        Los dicts pueden incluir una clave especial ``_error_fields`` (set de
+        nombres de columna) para resaltar en rojo las celdas con errores.
+
         Args:
             data: Lista de objetos con atributos matching field_map.
         """
@@ -85,6 +88,10 @@ class DataTable(QTableWidget):
         self.setRowCount(len(data))
 
         for row_idx, item in enumerate(data):
+            error_fields = set()
+            if isinstance(item, dict):
+                error_fields = item.get("_error_fields", set()) or set()
+
             for col_idx, field in enumerate(self._field_map):
                 if isinstance(item, dict):
                     value = item.get(field, "")
@@ -98,6 +105,11 @@ class DataTable(QTableWidget):
                 if hasattr(item, 'estado') and item.estado == "REVISAR":
                     cell.setForeground(QColor(self._palette["error"]))
 
+                # Colorear en rojo las celdas con error detectado
+                if field in error_fields:
+                    cell.setForeground(QColor(self._palette["error"]))
+                    cell.setBackground(QColor(self._palette["error_bg"]))
+
                 self.setItem(row_idx, col_idx, cell)
 
             self.setRowHeight(row_idx, 28)
@@ -107,6 +119,12 @@ class DataTable(QTableWidget):
         if 0 <= row < len(self._data):
             return self._data[row]
         return None
+
+    def apply_theme(self, dark: bool):
+        """Reaplica los colores de celdas al cambiar el tema."""
+        self._palette = get_palette(dark)
+        if self._data:
+            self.load_data(self._data)
 
     def filter_rows(self, text: str):
         """Filtra filas mostrando solo las que contienen el texto."""

@@ -25,17 +25,45 @@ class PDFServicePort(ABC):
         ...
 
     @abstractmethod
+    def abrir(self, ruta: str) -> Any:
+        """
+        Abre un PDF para extracción reutilizable.
+
+        Abre el documento una sola vez para que la extracción de múltiples
+        fragmentos no re-cargue el archivo completo en memoria por cada
+        fragmento.
+
+        Args:
+            ruta: Ruta al PDF maestro.
+
+        Returns:
+            Lector opaco del PDF (depende de la implementación). Debe
+            liberarse con ``cerrar``.
+        """
+        ...
+
+    @abstractmethod
+    def cerrar(self, lector: Any) -> None:
+        """
+        Libera los recursos del lector abierto con ``abrir``.
+
+        Args:
+            lector: Lector devuelto por ``abrir``.
+        """
+        ...
+
+    @abstractmethod
     def extraer_paginas(
         self,
-        ruta_origen: str,
+        lector: Any,
         paginas: List[int],
         ruta_destino: str,
     ) -> None:
         """
-        Extrae páginas específicas de un PDF y las guarda en un nuevo archivo.
+        Extrae páginas de un PDF ya abierto y las guarda en un nuevo archivo.
 
         Args:
-            ruta_origen: Ruta al PDF maestro.
+            lector: Lector devuelto por ``abrir``.
             paginas: Lista de números de página (1-based).
             ruta_destino: Ruta donde guardar el PDF resultante.
         """

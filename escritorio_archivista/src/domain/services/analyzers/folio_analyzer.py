@@ -41,11 +41,21 @@ def analizar_folios(
     seen_starts: dict = {}  # {folio_int_inicio: record_id}
     prev_hasta_int: Optional[int] = None
     expected_next_int: Optional[int] = None
+    prev_protocolo: Optional[str] = None
     validados = 0
     revisados = 0
 
     for record in records:
         revisados += 1
+
+        # Cada protocolo tiene su propia secuencia de folios (los folios se
+        # reinician entre protocolos), por lo que se resetea el estado.
+        if prev_protocolo is not None and record.protocolo != prev_protocolo:
+            seen_starts = {}
+            prev_hasta_int = None
+            expected_next_int = None
+        prev_protocolo = record.protocolo
+
         parsed = parse_folios(record.folios)
 
         # 1. FORMATO

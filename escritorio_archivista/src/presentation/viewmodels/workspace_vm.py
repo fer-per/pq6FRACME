@@ -31,15 +31,20 @@ class LoadInventoryWorker(QRunnable):
     @Slot()
     def run(self):
         try:
+            # Con mapeo automático y fila_fin sin definir (0), se amplía el
+            # límite superior para detectar la última fila con datos reales.
+            fila_fin = self._state.fila_fin if self._state.fila_fin else 10 ** 6
             result = self._container.cargar_inventario.ejecutar(
                 ruta_excel=self._state.excel_path,
+                fila_datos_inicio=self._state.fila_datos_inicio,
                 fila_inicio=self._state.fila_inicio,
-                fila_fin=self._state.fila_fin,
+                fila_fin=fila_fin,
                 folio_inicio=self._state.folio_inicio,
                 pag_pdf_inicio=self._state.pag_pdf_inicio,
                 segmentos=self._state.segmentos or None,
                 exclusiones=self._state.exclusions or None,
                 page_map=self._state.page_map or None,
+                auto_detect=self._state.fila_datos_auto,
             )
             self.signals.finished.emit(result)
         except Exception as e:
@@ -63,6 +68,7 @@ class WorkspaceVM(QObject):
     def set_excel_path(self, path: str):
         """Establece la ruta del Excel y carga el inventario."""
         self._state.excel_path = path
+        self._state.fila_datos_auto = True
         self._state.add_log("INFO", f"Excel seleccionado: {path}")
         self.load_inventory()
 
@@ -97,8 +103,22 @@ class WorkspaceVM(QObject):
         self._state.records = result.records
         self._state.suggestions = result.suggestions
 
+        # Mapeo automático: expone el rango real detectado en el Excel.
+        if result.metadata.get("fila_datos_inicio"):
+            primera_fila = result.metadata["fila_datos_inicio"]
+            self._state.fila_datos_inicio = primera_fila
+            if self._state.fila_datos_auto:
+                self._state.fila_inicio = primera_fila
+
         if result.metadata.get("acervo_detectado"):
             self._state.acervo_num = result.metadata["acervo_detectado"]
+
+        if self._state.fila_datos_auto:
+            if result.records:
+                self._state.fila_fin = max(r.fila for r in result.records)
+                self._state.pag_pdf_inicio = 1
+                if not self._state.folio_inicio:
+                    self._state.folio_inicio = result.records[0].folios or ""
 
         self._state.add_log(
             "SUCCESS",
@@ -112,9 +132,11 @@ class WorkspaceVM(QObject):
         self._state.add_log("ERR", f"Error cargando inventario: {error_msg}")
         self.loading_error.emit(error_msg)
 
-    def update_config(self, fila_inicio: int, fila_fin: int,
-                      folio_inicio: str, pag_pdf_inicio: int):
+    def update_config(self, fila_datos_inicio: int, fila_inicio: int,
+                      fila_fin: int, folio_inicio: str, pag_pdf_inicio: int):
         """Actualiza la configuración de mapeo y recarga."""
+        self._state.fila_datos_auto = False
+        self._state.fila_datos_inicio = fila_datos_inicio
         self._state.fila_inicio = fila_inicio
         self._state.fila_fin = fila_fin
         self._state.folio_inicio = folio_inicio

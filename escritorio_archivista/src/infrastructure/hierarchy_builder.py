@@ -33,7 +33,7 @@ class HierarchyBuilder(HierarchyBuilderPort):
     4. {escribano}
     5. {año}
     6. PROTOCOLO {protocolo}
-    7. REGISTRO {id sin #}
+    7. REGISTRO {registro} (número real del catálogo; fallback al ID interno)
     8. {titulo_estandar} (clasificación)
     9. {mes}
     10. {interesado1}
@@ -69,9 +69,9 @@ class HierarchyBuilder(HierarchyBuilderPort):
         # Nivel 6: Protocolo
         n6 = f"PROTOCOLO {self._sanitize(record.protocolo or '0')}"
 
-        # Nivel 7: Registro (ID sin #)
+        # Nivel 7: Registro (número real de registro del catálogo)
         registro_id = record.id.replace("#", "")
-        n7 = f"REGISTRO {registro_id}"
+        n7 = self._nivel_registro(record, registro_id)
 
         # Nivel 8: Título clasificado
         n8 = self._clasificar_titulo(record.titulo)
@@ -82,9 +82,10 @@ class HierarchyBuilder(HierarchyBuilderPort):
         # Nivel 10: Interesado 1
         n10 = self._sanitize(record.interesado1) if record.interesado1 else f"Interesado_A_{registro_id}"
 
-        # Nivel 11: Nombre del archivo (Interesado 2 + .pdf)
-        if record.interesado2:
-            n11 = f"{self._sanitize(record.interesado2)}.pdf"
+        # Nivel 11: Nombre del archivo (interesado 2, con respaldo en interesado 1)
+        nombre_archivo = record.interesado2 or record.interesado1
+        if nombre_archivo:
+            n11 = f"{self._sanitize(nombre_archivo)}.pdf"
         else:
             n11 = f"{registro_id}.pdf"
 
@@ -96,6 +97,34 @@ class HierarchyBuilder(HierarchyBuilderPort):
         full_path = self._resolver_colision(full_path)
 
         return full_path
+
+    @staticmethod
+    def _nivel_registro(record: InventoryRecord, registro_id: str) -> str:
+        """
+        Genera el nivel REGISTRO usando el número real del catálogo.
+
+        En el inventario, un mismo "Registro N°X" agrupa varias escrituras;
+        usar el ID interno (generado por orden de fila) fragmentaría ese
+        grupo en una carpeta por documento. Se usa ``record.registro`` cuando
+        el valor es válido y, si no, se cae al ID interno para conservar
+        rutas únicas.
+
+        Args:
+            record: Registro del inventario.
+            registro_id: ID interno sin el prefijo '#'.
+
+        Returns:
+            Nombre del nivel, ej: "REGISTRO 3" o "REGISTRO 0001".
+        """
+        valor = (record.registro or "").strip()
+
+        # Valores que no son un número de registro: vacío, hora mal
+        # interpretada, filas de índice/sub-encabezado o anotaciones.
+        if valor and valor not in ("0", "00:00:00") and ":" not in valor \
+                and not re.search(r'(?i)(registro|protocolo|indice|salto)', valor):
+            return f"REGISTRO {HierarchyBuilder._sanitize(valor)}"
+
+        return f"REGISTRO {registro_id}"
 
     def _clasificar_titulo(self, titulo: str) -> str:
         """Clasifica el título del documento."""

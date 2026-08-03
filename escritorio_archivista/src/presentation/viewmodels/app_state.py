@@ -35,6 +35,7 @@ class AppStateVM(QObject):
     pdf_changed = Signal()
     config_changed = Signal()
     session_changed = Signal()
+    theme_changed = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -51,10 +52,12 @@ class AppStateVM(QObject):
         self._logs: List[SystemLog] = []
 
         # ─── Configuración de mapeo ──────────────────────────
-        self._fila_inicio: int = 10
-        self._fila_fin: int = 500
-        self._folio_inicio: str = "001r"
-        self._pag_pdf_inicio: int = 1
+        self._fila_datos_inicio: int = 0
+        self._fila_datos_auto: bool = True
+        self._fila_inicio: int = 0
+        self._fila_fin: int = 0
+        self._folio_inicio: str = ""
+        self._pag_pdf_inicio: int = 0
         self._segmentos: list = []
         self._overrides: dict = {}
         self._page_map: dict = {}
@@ -168,12 +171,29 @@ class AppStateVM(QObject):
         self._dual_view_active = value
 
     @property
+    def fila_datos_inicio(self) -> int:
+        return self._fila_datos_inicio
+
+    @fila_datos_inicio.setter
+    def fila_datos_inicio(self, value: int):
+        self._fila_datos_inicio = max(0, value)
+        self.config_changed.emit()
+
+    @property
+    def fila_datos_auto(self) -> bool:
+        return self._fila_datos_auto
+
+    @fila_datos_auto.setter
+    def fila_datos_auto(self, value: bool):
+        self._fila_datos_auto = value
+
+    @property
     def fila_inicio(self) -> int:
         return self._fila_inicio
 
     @fila_inicio.setter
     def fila_inicio(self, value: int):
-        self._fila_inicio = max(2, value)
+        self._fila_inicio = max(0, value)
         self.config_changed.emit()
 
     @property
@@ -191,7 +211,7 @@ class AppStateVM(QObject):
 
     @pag_pdf_inicio.setter
     def pag_pdf_inicio(self, value: int):
-        self._pag_pdf_inicio = max(1, value)
+        self._pag_pdf_inicio = max(0, value)
         self.config_changed.emit()
 
     @property
@@ -243,7 +263,8 @@ class AppStateVM(QObject):
 
     @dark_mode.setter
     def dark_mode(self, value: bool):
-        self._dark_mode = value
+        self._dark_mode = bool(value)
+        self.theme_changed.emit(self._dark_mode)
 
     # ═══ MÉTODOS ═══════════════════════════════════════════════
 
@@ -265,6 +286,7 @@ class AppStateVM(QObject):
             "excel_path": self._excel_path,
             "pdf_path": self._pdf_path,
             "output_dir": self._output_dir,
+            "fila_datos_inicio": self._fila_datos_inicio,
             "fila_inicio": self._fila_inicio,
             "fila_fin": self._fila_fin,
             "folio_inicio": self._folio_inicio,
@@ -285,10 +307,11 @@ class AppStateVM(QObject):
         self._excel_path = data.get("excel_path")
         self._pdf_path = data.get("pdf_path")
         self._output_dir = data.get("output_dir")
-        self._fila_inicio = data.get("fila_inicio", 10)
-        self._fila_fin = data.get("fila_fin", 500)
-        self._folio_inicio = data.get("folio_inicio", "001r")
-        self._pag_pdf_inicio = data.get("pag_pdf_inicio", 1)
+        self._fila_datos_inicio = data.get("fila_datos_inicio", 0)
+        self._fila_inicio = data.get("fila_inicio", 0)
+        self._fila_fin = data.get("fila_fin", 0)
+        self._folio_inicio = data.get("folio_inicio", "")
+        self._pag_pdf_inicio = data.get("pag_pdf_inicio", 0)
         self._pdf_total_pages = data.get("pdf_total_pages", 0)
         self._acervo_num = data.get("acervo_num", "7")
         self._segmentos = data.get("segmentos", [])

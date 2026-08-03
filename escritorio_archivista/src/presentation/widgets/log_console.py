@@ -46,6 +46,7 @@ class LogConsole(QWidget):
             f"background-color: {self._palette['tertiary']}; "
             f"border-top-left-radius: 6px; border-top-right-radius: 6px;"
         )
+        self._header = header
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(10, 0, 10, 0)
 
@@ -54,6 +55,7 @@ class LogConsole(QWidget):
         title_label.setStyleSheet(
             f"color: {self._palette['on_tertiary']}; background: transparent;"
         )
+        self._title_label = title_label
         header_layout.addWidget(title_label)
         header_layout.addStretch()
 
@@ -71,6 +73,11 @@ class LogConsole(QWidget):
         self._text_edit = QTextEdit()
         self._text_edit.setReadOnly(True)
         self._text_edit.setFont(get_font("mono"))
+        self._apply_text_style()
+        self._text_edit.setMinimumHeight(80)
+        layout.addWidget(self._text_edit)
+
+    def _apply_text_style(self):
         self._text_edit.setStyleSheet(
             f"background-color: {self._palette['tertiary']}; "
             f"color: {self._palette['on_tertiary']}; "
@@ -78,8 +85,21 @@ class LogConsole(QWidget):
             f"border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; "
             f"padding: 6px 10px;"
         )
-        self._text_edit.setMinimumHeight(80)
-        layout.addWidget(self._text_edit)
+
+    def apply_theme(self, dark: bool):
+        """Reaplica los estilos dependientes del tema."""
+        self._palette = get_palette(dark)
+        self._header.setStyleSheet(
+            f"background-color: {self._palette['tertiary']}; "
+            f"border-top-left-radius: 6px; border-top-right-radius: 6px;"
+        )
+        self._title_label.setStyleSheet(
+            f"color: {self._palette['on_tertiary']}; background: transparent;"
+        )
+        self._status_label.setStyleSheet(
+            f"color: {self._get_color('INFO')}; background: transparent;"
+        )
+        self._apply_text_style()
 
     def add_log(self, log: SystemLog):
         """Agrega un mensaje de log con formato y color."""

@@ -51,7 +51,10 @@ def create_app(argv: list) -> QApplication:
     # Log inicial
     state.add_log("INFO", "Sistema listo. Bienvenido al Escritorio Archivista.")
 
-    window.show()
+    # Iniciar en el Espacio de Trabajo, ocupando toda la pantalla
+    # pero sin ocultar la barra de tareas de Windows.
+    window.navigate_to(ViewId.WORKSPACE)
+    window.showMaximized()
     logger.info("Aplicación iniciada.")
 
     return app

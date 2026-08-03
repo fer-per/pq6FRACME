@@ -28,6 +28,7 @@ class TestSessionRepository:
         datos = {
             "excel_path": "test.xlsx",
             "pdf_path": "test.pdf",
+            "fila_datos_inicio": 12,
             "fila_inicio": 10,
             "fila_fin": 500,
         }
@@ -36,6 +37,7 @@ class TestSessionRepository:
 
         assert cargados["excel_path"] == "test.xlsx"
         assert cargados["fila_inicio"] == 10
+        assert cargados["fila_datos_inicio"] == 12
 
     def test_guardar_y_cargar_records(self):
         record = InventoryRecord(
@@ -127,7 +129,7 @@ class TestHierarchyBuilder:
         assert "García López" in ruta
         assert "1891" in ruta
         assert "PROTOCOLO 3" in ruta
-        assert "REGISTRO 0001" in ruta
+        assert "REGISTRO 001" in ruta
         assert "COMPRAVENTA" in ruta
         assert "3. MARZO" in ruta
         assert "Juan Pérez" in ruta
@@ -150,6 +152,52 @@ class TestHierarchyBuilder:
         )
         ruta = self.builder.construir_ruta(record, "/output", "7")
         assert "ESCRITURA_VARIAS" in ruta
+
+    def test_registro_usa_numero_real_del_catalogo(self):
+        """El nivel REGISTRO usa el N° de registro del inventario, no el ID interno."""
+        record = InventoryRecord(
+            id="#0042", fila=51, registro="3", escribano="López",
+            protocolo="1", folios="010r-011v", pg_pdf="19-21",
+            titulo="PODER", fecha_inicio="01/06/1567",
+        )
+        ruta = self.builder.construir_ruta(record, "/output", "7")
+        assert "\\REGISTRO 3\\" in ruta or "/REGISTRO 3/" in ruta
+        assert "REGISTRO 0042" not in ruta
+
+    def test_registro_mismo_numero_agrupa_registros(self):
+        """Varias escrituras del mismo Registro N° comparten carpeta."""
+        base = {
+            "escribano": "DIEGO DE AGUILAR", "protocolo": "1",
+            "folios": "001r-001v", "pg_pdf": "1-2",
+            "titulo": "PODER", "fecha_inicio": "07/05/1567",
+        }
+        r1 = InventoryRecord(id="#0001", fila=19, registro="1", **base)
+        r2 = InventoryRecord(id="#0002", fila=20, registro="1", **base)
+
+        p1 = self.builder.construir_ruta(r1, "/output", "7")
+        p2 = self.builder.construir_ruta(r2, "/output", "7")
+
+        assert "REGISTRO 1" in p1
+        # La porción de la ruta hasta el nivel REGISTRO es idéntica
+        assert p1.split("REGISTRO 1")[0] == p2.split("REGISTRO 1")[0]
+
+    def test_registro_vacio_cae_al_id_interno(self):
+        record = InventoryRecord(
+            id="#0242", fila=275, registro="", escribano="DIEGO DE AGUILAR",
+            protocolo="2", folios="079v-080v", pg_pdf="",
+            titulo="DOTE", fecha_inicio="06/02/1568",
+        )
+        ruta = self.builder.construir_ruta(record, "/output", "7")
+        assert "REGISTRO 0242" in ruta
+
+    def test_registro_invalido_cae_al_id_interno(self):
+        record = InventoryRecord(
+            id="#0342", fila=3608, registro="00:00:00", escribano="X",
+            protocolo="3", folios="001r", pg_pdf="",
+            titulo="PODER", fecha_inicio="06/02/1568",
+        )
+        ruta = self.builder.construir_ruta(record, "/output", "7")
+        assert "REGISTRO 0342" in ruta
 
     def test_sanitize_caracteres_invalidos(self):
         result = HierarchyBuilder._sanitize('Nombre<>Inválido:Test')
@@ -188,3 +236,23 @@ class TestHierarchyBuilder:
         ruta = self.builder.construir_ruta(record, "/output", "7")
         assert "Interesado_A_0006" in ruta
         assert "0006.pdf" in ruta
+
+    def test_nombre_pdf_usuario_interesado2(self):
+        record = InventoryRecord(
+            id="#0007", fila=16, registro="007", escribano="Test",
+            protocolo="1", folios="008r", pg_pdf="15", titulo="Test",
+            fecha_inicio="15/03/1891",
+            interesado1="Juan Pérez", interesado2="María López",
+        )
+        ruta = self.builder.construir_ruta(record, "/output", "7")
+        assert ruta.endswith("María López.pdf")
+
+    def test_nombre_pdf_sin_interesado2_usa_interesado1(self):
+        record = InventoryRecord(
+            id="#0008", fila=17, registro="008", escribano="Test",
+            protocolo="1", folios="009r", pg_pdf="17", titulo="Test",
+            fecha_inicio="15/03/1891",
+            interesado1="MARIA DE SOLIER", interesado2="",
+        )
+        ruta = self.builder.construir_ruta(record, "/output", "7")
+        assert ruta.endswith("MARIA DE SOLIER.pdf")

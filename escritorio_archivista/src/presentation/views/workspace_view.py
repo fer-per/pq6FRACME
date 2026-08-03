@@ -18,6 +18,7 @@ from src.presentation.viewmodels.app_state import AppStateVM
 from src.presentation.viewmodels.workspace_vm import WorkspaceVM
 from src.presentation.widgets.data_table import DataTable
 from src.presentation.widgets.search_bar import SearchBar
+from src.presentation.constants import MODULE_ICONS
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
 
@@ -25,54 +26,131 @@ logger = logging.getLogger(__name__)
 
 
 class DropZone(QWidget):
-    """Zona de arrastrar y soltar / clic para seleccionar archivo."""
+    """Tarjeta de carga: cabecera con el módulo y zona de arrastrar/soltar.
 
-    def __init__(self, icon: str, label: str, extensions: str, parent=None):
+    La cabecera identifica el tipo de archivo (Excel o PDF) y el cuerpo
+    muestra el estado de carga; al cargarse un archivo se exhibe el nombre
+    con elisión profesional y la ruta completa como tooltip.
+    """
+
+    def __init__(self, icon: str, title: str, extensions: str, parent=None):
         super().__init__(parent)
         self._extensions = extensions
+        self._title = title
+        self._icon = icon
         self._file_path = None
+        self._filename = None
+        self._hovered = False
         self._palette = get_palette()
 
         self.setAcceptDrops(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(100)
+        self.setMinimumHeight(150)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Cabecera con el nombre del módulo
+        title_bar = QWidget()
+        title_bar.setFixedHeight(34)
+        self._title_bar = title_bar
+        title_layout = QHBoxLayout(title_bar)
+        title_layout.setContentsMargins(12, 0, 12, 0)
+
+        self._title_label = QLabel(f"{icon}  {title}")
+        self._title_label.setFont(get_font("body_sm_bold"))
+        title_layout.addWidget(self._title_label)
+        title_layout.addStretch()
+        outer.addWidget(title_bar)
+
+        # Cuerpo: ícono grande + estado + pista
+        self._body = QWidget()
+        body_layout = QVBoxLayout(self._body)
+        body_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        body_layout.setContentsMargins(12, 18, 12, 18)
+        body_layout.setSpacing(4)
 
         self._icon_label = QLabel(icon)
         self._icon_label.setFont(get_font("icon_lg"))
         self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._icon_label.setStyleSheet("background: transparent;")
-        layout.addWidget(self._icon_label)
+        body_layout.addWidget(self._icon_label)
 
-        self._text_label = QLabel(label)
-        self._text_label.setFont(get_font("body"))
-        self._text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._text_label.setStyleSheet(
-            f"color: {self._palette['text_secondary']}; background: transparent;"
+        self._status_label = QLabel("Sin archivo cargado")
+        self._status_label.setFont(get_font("body_sm_bold"))
+        self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._status_label.setStyleSheet(
+            f"color: {self._palette['text_primary']}; background: transparent;"
         )
-        layout.addWidget(self._text_label)
+        body_layout.addWidget(self._status_label)
 
-        self._hint_label = QLabel(f"Arrastra o haz clic ({extensions})")
+        self._hint_label = QLabel(f"Arrastra o haz clic aqu\u00ED ({extensions})")
         self._hint_label.setFont(get_font("body_xs"))
         self._hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hint_label.setStyleSheet(
             f"color: {self._palette['text_disabled']}; background: transparent;"
         )
-        layout.addWidget(self._hint_label)
+        body_layout.addWidget(self._hint_label)
+
+        outer.addWidget(self._body, stretch=1)
 
         self._update_style(False)
 
     def _update_style(self, hover: bool):
+        self._hovered = hover
         p = self._palette
+        self._title_bar.setStyleSheet(
+            f"background-color: {p['primary']}; "
+            f"border-top-left-radius: 8px; border-top-right-radius: 8px;"
+        )
+        self._title_label.setStyleSheet(
+            f"color: {p['on_primary']}; background: transparent;"
+        )
         border_color = p['primary'] if hover else p['outline_variant']
         bg = p['selected_bg'] if hover else p['surface']
-        self.setStyleSheet(
-            f"DropZone {{ background-color: {bg}; "
-            f"border: 2px dashed {border_color}; border-radius: 10px; }}"
+        self._body.setStyleSheet(
+            f"background-color: {bg}; "
+            f"border: 2px dashed {border_color}; "
+            f"border-top: none; "
+            f"border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;"
         )
+
+    def _elide(self, text: str, max_width: int) -> str:
+        fm = self._status_label.fontMetrics()
+        return fm.elidedText(text, Qt.TextElideMode.ElideMiddle, max_width)
+
+    def _refresh_texts(self):
+        if self._file_path:
+            status_w = max(120, self._status_label.width() - 8)
+            hint_w = max(120, self._hint_label.width() - 8)
+            self._status_label.setText("\u2713 " + self._elide(self._filename, status_w))
+            self._status_label.setToolTip(self._filename)
+            self._hint_label.setText(self._elide(self._file_path, hint_w))
+            self._hint_label.setToolTip(self._file_path)
+        else:
+            self._status_label.setText("Sin archivo cargado")
+            self._status_label.setToolTip("")
+            self._hint_label.setText(
+                f"Arrastra o haz clic aqu\u00ED ({self._extensions})"
+            )
+            self._hint_label.setToolTip("")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._refresh_texts()
+
+    def apply_theme(self, dark: bool):
+        """Reaplica el estilo al cambiar el tema."""
+        self._palette = get_palette(dark)
+        self._status_label.setStyleSheet(
+            f"color: {self._palette['text_primary']}; background: transparent;"
+        )
+        self._hint_label.setStyleSheet(
+            f"color: {self._palette['text_disabled']}; background: transparent;"
+        )
+        self._update_style(self._hovered)
 
     def mousePressEvent(self, event):
         self._select_file()
@@ -102,9 +180,8 @@ class DropZone(QWidget):
 
     def set_file(self, path: str):
         self._file_path = path
-        filename = os.path.basename(path)
-        self._text_label.setText(f"\u2713 {filename}")
-        self._hint_label.setText(path)
+        self._filename = os.path.basename(path)
+        self._refresh_texts()
         self._update_style(False)
 
     @property
@@ -137,11 +214,15 @@ class WorkspaceView(QWidget):
         step1_layout = QHBoxLayout(step1)
         step1_layout.setSpacing(16)
 
-        self._excel_drop = DropZone("\u25A3", "Inventario Excel", "*.xlsx")
-        step1_layout.addWidget(self._excel_drop)
+        self._excel_drop = DropZone(
+            MODULE_ICONS["workspace"], "INVENTARIO EXCEL", "*.xlsx"
+        )
+        step1_layout.addWidget(self._excel_drop, stretch=1)
 
-        self._pdf_drop = DropZone("\u25A1", "PDF Original", "*.pdf")
-        step1_layout.addWidget(self._pdf_drop)
+        self._pdf_drop = DropZone(
+            MODULE_ICONS["pdf_editor"], "PDF ORIGINAL", "*.pdf"
+        )
+        step1_layout.addWidget(self._pdf_drop, stretch=1)
 
         layout.addWidget(step1)
 
@@ -150,28 +231,35 @@ class WorkspaceView(QWidget):
         step2_grid = QGridLayout(step2)
         step2_grid.setSpacing(12)
 
-        step2_grid.addWidget(QLabel("Inicia desde fila:"), 0, 0)
+        step2_grid.addWidget(QLabel("Fila inicio de datos:"), 0, 0)
+        self._fila_datos_inicio_spin = QSpinBox()
+        self._fila_datos_inicio_spin.setRange(0, 99999)
+        self._fila_datos_inicio_spin.setValue(self._state.fila_datos_inicio)
+        self._fila_datos_inicio_spin.setFixedWidth(80)
+        step2_grid.addWidget(self._fila_datos_inicio_spin, 0, 1)
+
+        step2_grid.addWidget(QLabel("Inicia desde fila:"), 0, 2)
         self._fila_inicio_spin = QSpinBox()
-        self._fila_inicio_spin.setRange(2, 99999)
+        self._fila_inicio_spin.setRange(0, 99999)
         self._fila_inicio_spin.setValue(self._state.fila_inicio)
         self._fila_inicio_spin.setFixedWidth(80)
-        step2_grid.addWidget(self._fila_inicio_spin, 0, 1)
+        step2_grid.addWidget(self._fila_inicio_spin, 0, 3)
 
-        step2_grid.addWidget(QLabel("Termina en fila:"), 0, 2)
+        step2_grid.addWidget(QLabel("Termina en fila:"), 0, 4)
         self._fila_fin_spin = QSpinBox()
-        self._fila_fin_spin.setRange(2, 99999)
+        self._fila_fin_spin.setRange(0, 99999)
         self._fila_fin_spin.setValue(self._state.fila_fin)
         self._fila_fin_spin.setFixedWidth(80)
-        step2_grid.addWidget(self._fila_fin_spin, 0, 3)
+        step2_grid.addWidget(self._fila_fin_spin, 0, 5)
 
-        step2_grid.addWidget(QLabel("Folio Inicio Protocolo:"), 0, 4)
+        step2_grid.addWidget(QLabel("Folio Inicio Protocolo:"), 0, 6)
         self._folio_inicio_input = QLineEdit(self._state.folio_inicio)
         self._folio_inicio_input.setFixedWidth(80)
-        step2_grid.addWidget(self._folio_inicio_input, 0, 5)
+        step2_grid.addWidget(self._folio_inicio_input, 0, 7)
 
         step2_grid.addWidget(QLabel("Pág. PDF Inicio:"), 0, 6)
         self._pag_pdf_spin = QSpinBox()
-        self._pag_pdf_spin.setRange(1, 99999)
+        self._pag_pdf_spin.setRange(0, 99999)
         self._pag_pdf_spin.setValue(self._state.pag_pdf_inicio)
         self._pag_pdf_spin.setFixedWidth(80)
         step2_grid.addWidget(self._pag_pdf_spin, 0, 7)
@@ -215,6 +303,7 @@ class WorkspaceView(QWidget):
         tip = QLabel("\u2139  Haz clic en una fila para navegar a la página PDF correspondiente")
         tip.setFont(get_font("body_xs"))
         tip.setStyleSheet(f"color: {self._palette['text_disabled']};")
+        self._tip_label = tip
         step3_layout.addWidget(tip)
 
         layout.addWidget(step3, stretch=1)
@@ -262,6 +351,7 @@ class WorkspaceView(QWidget):
 
     def _on_save_config(self):
         self._vm.update_config(
+            fila_datos_inicio=self._fila_datos_inicio_spin.value(),
             fila_inicio=self._fila_inicio_spin.value(),
             fila_fin=self._fila_fin_spin.value(),
             folio_inicio=self._folio_inicio_input.text(),
@@ -289,6 +379,11 @@ class WorkspaceView(QWidget):
             pass
 
     def _on_loading_finished(self, result):
+        self._fila_datos_inicio_spin.setValue(self._state.fila_datos_inicio)
+        self._fila_inicio_spin.setValue(self._state.fila_inicio)
+        self._fila_fin_spin.setValue(self._state.fila_fin)
+        self._pag_pdf_spin.setValue(self._state.pag_pdf_inicio)
+        self._folio_inicio_input.setText(self._state.folio_inicio)
         self._refresh_table()
 
     def _on_loading_error(self, error_msg: str):
@@ -298,3 +393,16 @@ class WorkspaceView(QWidget):
         records = self._state.records
         self._table.load_data(records)
         self._count_label.setText(f"{len(records)} registros")
+
+    def apply_theme(self, dark: bool):
+        """Reaplica los estilos dependientes del tema."""
+        self._palette = get_palette(dark)
+        self._excel_drop.apply_theme(dark)
+        self._pdf_drop.apply_theme(dark)
+        self._count_label.setStyleSheet(
+            f"color: {self._palette['text_secondary']};"
+        )
+        self._tip_label.setStyleSheet(
+            f"color: {self._palette['text_disabled']};"
+        )
+        self._table.apply_theme(dark)

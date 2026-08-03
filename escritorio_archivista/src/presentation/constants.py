@@ -27,3 +27,28 @@ MIN_WINDOW_HEIGHT = 750
 
 # Animación
 ANIMATION_DURATION_MS = 200
+
+
+class ModuleIcon:
+    """Íconos de cada módulo (caracteres Unicode formales).
+
+    Cada ícono evoca la función de su módulo para facilitar la navegación.
+    """
+    WORKSPACE = "\u25A4"    # ▤ carpeta/documento → carga y gestión de archivos
+    ANALYZER = "\u2611"     # ☑ casilla verificada → validación de datos
+    EXCLUSIONS = "\u2691"   # ⚑ bandera → exclusiones/saltos
+    PROCESS = "\u2702"      # ✂ tijeras → fragmentación del PDF
+    PDF_EDITOR = "\u25AD"   # ▭ página → edición de páginas PDF
+    DOCS = "\u2261"         # ≡ líneas → documentación
+    SUPPORT = "\u2139"      # ℹ info → soporte
+
+
+MODULE_ICONS = {
+    "workspace": ModuleIcon.WORKSPACE,
+    "analyzer": ModuleIcon.ANALYZER,
+    "exclusions": ModuleIcon.EXCLUSIONS,
+    "process": ModuleIcon.PROCESS,
+    "pdf_editor": ModuleIcon.PDF_EDITOR,
+    "docs": ModuleIcon.DOCS,
+    "support": ModuleIcon.SUPPORT,
+}

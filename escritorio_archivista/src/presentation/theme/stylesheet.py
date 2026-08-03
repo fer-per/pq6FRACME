@@ -61,7 +61,7 @@ def generate_stylesheet(dark: bool = False) -> str:
     /* ═══ BUTTONS ═══ */
     QPushButton {{
         background-color: {p['primary']};
-        color: #ffffff;
+        color: {p['on_primary']};
         border: none;
         border-radius: 6px;
         padding: 8px 18px;
@@ -69,12 +69,12 @@ def generate_stylesheet(dark: bool = False) -> str:
         font-size: 9pt;
     }}
     QPushButton:hover {{
-        background-color: {p['primary_container']};
-        color: #ffffff;
+        background-color: {p['primary_hover']};
+        color: {p['on_primary']};
     }}
     QPushButton:pressed {{
-        background-color: {p['primary']};
-        color: #ffffff;
+        background-color: {p['primary_pressed']};
+        color: {p['on_primary']};
         padding-top: 9px;
     }}
     QPushButton:disabled {{
@@ -94,7 +94,31 @@ def generate_stylesheet(dark: bool = False) -> str:
     }}
     QPushButton[flat="true"]:pressed {{
         background-color: {p['primary']};
-        color: #ffffff;
+        color: {p['on_primary']};
+    }}
+
+    /* Sidebar */
+    QPushButton[sidebar="true"] {{
+        background-color: transparent;
+        color: {p['text_secondary']};
+        border: none;
+        border-left: 3px solid transparent;
+        border-radius: 0;
+        text-align: left;
+        padding-left: 10px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        font-weight: normal;
+    }}
+    QPushButton[sidebar="true"]:hover {{
+        background-color: {p['surface_high']};
+        color: {p['text_primary']};
+    }}
+    QPushButton[sidebar="true"]:checked {{
+        background-color: {p['selected_bg']};
+        color: {p['primary']};
+        border-left: 3px solid {p['primary']};
+        font-weight: bold;
     }}
 
     /* ═══ INPUTS ═══ */
@@ -242,6 +266,24 @@ def generate_stylesheet(dark: bool = False) -> str:
     QLabel[caption="true"] {{
         font-size: 8pt;
         color: {p['text_secondary']};
+    }}
+    QLabel[hint="true"] {{
+        font-size: 7pt;
+        color: {p['text_disabled']};
+    }}
+
+    /* ═══ TOOLBAR ═══ */
+    QToolBar {{
+        background-color: {p['surface_container']};
+        border: none;
+        border-bottom: 1px solid {p['outline_variant']};
+        padding: 4px;
+        spacing: 4px;
+    }}
+    QToolBar::separator {{
+        background-color: {p['outline_variant']};
+        width: 1px;
+        margin: 4px 6px;
     }}
 
     /* ═══ SPLITTER ═══ */

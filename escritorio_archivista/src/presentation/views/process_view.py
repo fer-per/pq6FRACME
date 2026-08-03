@@ -16,7 +16,7 @@ from src.application.container import Container
 from src.presentation.viewmodels.app_state import AppStateVM
 from src.presentation.viewmodels.process_vm import ProcessVM
 from src.presentation.widgets.data_table import DataTable
-from src.presentation.widgets.log_console import LogConsole
+from src.presentation.constants import MODULE_ICONS
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
 
@@ -40,7 +40,7 @@ class ProcessView(QWidget):
         layout.setSpacing(12)
 
         # Header
-        title = QLabel("\u2702  Fragmentar PDF Maestro")
+        title = QLabel(f"{MODULE_ICONS['process']}  Fragmentar PDF Maestro")
         title.setProperty("heading", True)
         layout.addWidget(title)
 
@@ -85,10 +85,6 @@ class ProcessView(QWidget):
 
         layout.addWidget(action_group)
 
-        # Consola de fragmentación
-        self._console = LogConsole(title="CONSOLA DE FRAGMENTACIÓN")
-        layout.addWidget(self._console)
-
         # Tabla de foliación mapeada
         table_group = QGroupBox("Detalle de Foliación Mapeada (Excel vs PDF)")
         table_layout = QVBoxLayout(table_group)
@@ -132,8 +128,6 @@ class ProcessView(QWidget):
         self._fragment_btn.setText("\u23F3 Procesando...")
         self._progress.setVisible(True)
         self._progress.setValue(0)
-        self._console.clear()
-        self._console.set_status("PROCESANDO", "WARN")
 
     def _on_progress(self, current: int, total: int, record_id: str):
         pct = int((current / total) * 100) if total > 0 else 0
@@ -145,7 +139,6 @@ class ProcessView(QWidget):
     def _on_finished(self, result):
         self._fragment_btn.setText("\u2713 Completado")
         self._progress.setValue(100)
-        self._console.set_status("COMPLETADO", "SUCCESS")
         self._status_label.setText(
             f"\u2713 {result.total_exitos} fragmentos creados, "
             f"{result.total_fallos} errores."
@@ -158,7 +151,6 @@ class ProcessView(QWidget):
         self._fragment_btn.setText("\u2717 Error")
         self._fragment_btn.setEnabled(True)
         self._progress.setVisible(False)
-        self._console.set_status("ERROR", "ERR")
 
         QTimer.singleShot(3000, self._reset_button)
 
@@ -169,3 +161,14 @@ class ProcessView(QWidget):
 
     def _refresh_table(self):
         self._table.load_data(self._state.records)
+
+    def apply_theme(self, dark: bool):
+        """Reaplica el tema a etiquetas y tabla de la vista."""
+        self._palette = get_palette(dark)
+        self._output_label.setStyleSheet(
+            f"color: {self._palette['text_secondary']};"
+        )
+        self._status_label.setStyleSheet(
+            f"color: {self._palette['text_secondary']};"
+        )
+        self._table.apply_theme(dark)

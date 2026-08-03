@@ -42,6 +42,15 @@ class TestParseFolios:
     def test_con_espacios(self):
         assert parse_folios("  001r-002v  ") == (1, 'r', 2, 'v')
 
+    def test_con_espacios_alrededor_del_guion(self):
+        assert parse_folios("99v - 100v") == (99, 'v', 100, 'v')
+
+    def test_con_espacios_antes_del_guion(self):
+        assert parse_folios("104r -104v") == (104, 'r', 104, 'v')
+
+    def test_con_espacios_despues_del_guion(self):
+        assert parse_folios("106r- 106v") == (106, 'r', 106, 'v')
+
     def test_mayusculas(self):
         """Debe normalizar a minúsculas."""
         assert parse_folios("001R-002V") == (1, 'r', 2, 'v')

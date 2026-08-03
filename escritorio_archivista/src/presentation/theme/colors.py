@@ -8,6 +8,8 @@ LIGHT_PALETTE = {
     # Primarios
     "primary":             "#570013",
     "primary_container":   "#800020",
+    "primary_hover":       "#6b1520",
+    "primary_pressed":     "#43000f",
     "on_primary":          "#ff828a",
     "background":          "#fcf9f8",
     "surface":             "#ffffff",
@@ -51,6 +53,8 @@ DARK_PALETTE = {
     # Primarios
     "primary":             "#ffb1b8",
     "primary_container":   "#93001a",
+    "primary_hover":       "#e79aa4",
+    "primary_pressed":     "#cc818c",
     "on_primary":          "#5f1126",
     "background":          "#1a1110",
     "surface":             "#211a19",

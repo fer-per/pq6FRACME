@@ -6,10 +6,8 @@ No depende de ninguna librería externa.
 """
 
 # ─── Excel Parsing ───────────────────────────────────────────
-SKIPROWS = 7              # Filas de cabecera del Excel a saltar
-HEADER_ROWS = 2           # Filas de encabezado de columna
-EXCEL_OFFSET = SKIPROWS + HEADER_ROWS  # = 9 (offset para calcular fila real)
-EXCEL_FIN_OFFSET = SKIPROWS + HEADER_ROWS - 1  # = 8
+HEADER_ROWS = 2                 # Filas de encabezado de columna
+DEFAULT_DATA_START_ROW = 19     # Fila (1-based) donde empiezan los datos por defecto
 
 # ─── Folio Analysis ─────────────────────────────────────────
 YEAR_MIN = 1500           # Año mínimo válido para documentos históricos
@@ -31,7 +29,7 @@ COLUMN_ALIASES = {
         "n° de folios", "folios", "rango", "paginas",
     ],
     "titulo": [
-        "titulo estandar", "titulo", "asunto", "desc",
+        "titulo", "escritura", "asunto",
     ],
     "data_topica": [
         "data top", "lugar", "topica",
@@ -52,13 +50,19 @@ COLUMN_ALIASES = {
 
 # ─── Columnas fallback por índice ────────────────────────────
 FALLBACK_COLUMNS = {
-    "titulo": 4,          # Columna 5 (índice 4)
+    "titulo": 7,          # Columna H (índice 7)
     "fecha_inicio": 5,    # Columna 6 (índice 5)
 }
 
 # ─── Filas a ignorar (sub-encabezados) ──────────────────────
 SKIP_ROW_KEYWORDS = [
     "protocolo", "registro", "fecha", "data cronica",
+]
+
+# ─── Filas de anotación/instrucciones (no son datos) ────────
+ANNOTATION_KEYWORDS = [
+    "nombres y apellidos", "recto v=verso", "sin espacio",
+    "mayuscula", "fecha corta",
 ]
 
 # ─── Valores a tratar como vacío ─────────────────────────────
