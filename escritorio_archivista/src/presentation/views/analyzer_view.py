@@ -169,7 +169,7 @@ class AnalyzerErrorTab(QWidget):
         info_bar.addWidget(self._info_label)
         info_bar.addStretch()
 
-        self._filter_btn = QPushButton("Solo Errores Fatales")
+        self._filter_btn = QPushButton("Solo L\u00edneas con Error")
         self._filter_btn.setProperty("flat", True)
         self._filter_btn.setFixedHeight(28)
         self._filter_btn.setCheckable(True)
@@ -201,7 +201,7 @@ class AnalyzerErrorTab(QWidget):
         )
 
         if self._filter_btn.isChecked():
-            self._table.load_data([r for r in rows if r["fatal"] == "Sí"])
+            self._table.load_data([r for r in rows if r["_errors"]])
         else:
             self._table.load_data(rows)
 
@@ -230,13 +230,11 @@ class AnalyzerErrorTab(QWidget):
                 row["descripcion"] = "; ".join(e.descripcion for e in record_errors)
                 row["valor_actual"] = "; ".join(e.valor_actual for e in record_errors)
                 row["valor_esperado"] = "; ".join(e.valor_esperado for e in record_errors)
-                row["fatal"] = "Sí" if any(e.fatal for e in record_errors) else "No"
             else:
                 row["tipo"] = ""
                 row["descripcion"] = ""
                 row["valor_actual"] = ""
                 row["valor_esperado"] = ""
-                row["fatal"] = "No"
 
             error_fields = set()
             for e in record_errors:
@@ -252,10 +250,10 @@ class AnalyzerErrorTab(QWidget):
     def _on_filter_toggled(self):
         if self._filter_btn.isChecked():
             self._filter_btn.setText("Mostrar Todos")
-            fatal_only = [r for r in self._all_rows if r["fatal"] == "Sí"]
-            self._table.load_data(fatal_only)
+            with_errors = [r for r in self._all_rows if r["_errors"]]
+            self._table.load_data(with_errors)
         else:
-            self._filter_btn.setText("Solo Errores Fatales")
+            self._filter_btn.setText("Solo L\u00edneas con Error")
             self._table.load_data(self._all_rows)
 
 

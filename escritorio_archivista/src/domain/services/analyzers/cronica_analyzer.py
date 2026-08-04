@@ -5,7 +5,10 @@ Detecta:
 1. Año no extraíble (warning)
 2. Año fuera de rango histórico [1500-2100] (fatal)
 3. Regresión cronológica: año actual < año anterior (fatal)
-4. Fecha anterior a la del registro previo dentro del mismo año (warning)
+4. Regresión de mes dentro del mismo año (warning)
+
+La sucesión se valida por MES y no por día, ya que en los protocolos
+históricos el día exacto no siempre es fiable ni relevante.
 """
 import logging
 import re
@@ -31,7 +34,7 @@ def analizar_cronica(records: List[InventoryRecord]) -> AnalysisResult:
     errores: List[AnalysisError] = []
     advertencias: List[AnalysisError] = []
     prev_anio: Optional[int] = None
-    prev_fecha: Optional[datetime] = None
+    prev_mes: Optional[int] = None
     anio_min: Optional[int] = None
     anio_max: Optional[int] = None
 
@@ -93,17 +96,17 @@ def analizar_cronica(records: List[InventoryRecord]) -> AnalysisResult:
             # No actualizar prev para no propagar cascada
             continue
 
-        # 4. Mismo año — verificar fechas completas
+        # 4. Mismo año — verificar sucesión por mes (no por día)
         if prev_anio is not None and anio == prev_anio:
-            fecha_actual = _parsear_fecha(record.fecha_inicio)
-            if fecha_actual is not None and prev_fecha is not None:
-                if fecha_actual < prev_fecha:
+            mes_actual = _extraer_mes(record.fecha_inicio)
+            if mes_actual is not None and prev_mes is not None:
+                if mes_actual < prev_mes:
                     advertencias.append(AnalysisError(
                         record_id=record.id,
                         fila=record.fila,
                         tipo="CRONICA",
                         descripcion=(
-                            "ADVERTENCIA: la fecha es anterior a la del "
+                            "ADVERTENCIA: el mes es anterior al del "
                             "registro previo."
                         ),
                         valor_actual=record.fecha_inicio,
@@ -111,7 +114,7 @@ def analizar_cronica(records: List[InventoryRecord]) -> AnalysisResult:
                     ))
 
         prev_anio = anio
-        prev_fecha = _parsear_fecha(record.fecha_inicio)
+        prev_mes = _extraer_mes(record.fecha_inicio)
 
     return AnalysisResult(
         nombre="Analizador de Data Crónica",
@@ -161,6 +164,14 @@ def _extraer_anio_de_texto(texto: str) -> Optional[int]:
     if match:
         return int(match.group(1))
     return None
+
+
+def _extraer_mes(texto: str) -> Optional[int]:
+    """Extrae el mes (1-12) de un string de fecha, o None si no se puede."""
+    fecha = _parsear_fecha(texto)
+    if fecha is None:
+        return None
+    return fecha.month
 
 
 def _parsear_fecha(texto: str) -> Optional[datetime]:

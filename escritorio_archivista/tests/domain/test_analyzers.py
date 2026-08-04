@@ -201,6 +201,27 @@ class TestCronicaAnalyzer:
         assert len(result.advertencias) == 1
         assert len(result.errores) == 0
 
+    def test_mismo_mes_dias_diferentes_no_advierten(self):
+        records = [
+            _rec(id="#0001", fecha_inicio="20/06/1891"),
+            _rec(id="#0002", fila=11, fecha_inicio="05/06/1891"),
+        ]
+        result = analizar_cronica(records)
+        # La sucesión se valida por mes: mismo mes no es regresión
+        assert result.ok
+        assert len(result.advertencias) == 0
+        assert len(result.errores) == 0
+
+    def test_regresion_de_mes_dentro_del_mismo_anio(self):
+        records = [
+            _rec(id="#0001", fecha_inicio="15/03/1891"),
+            _rec(id="#0002", fila=11, fecha_inicio="10/02/1891"),
+        ]
+        result = analizar_cronica(records)
+        assert len(result.advertencias) == 1
+        assert "mes" in result.advertencias[0].descripcion
+        assert len(result.errores) == 0
+
 
 # ═══════════════════════════════════════════════════════════════
 # COVERAGE ANALYZER
