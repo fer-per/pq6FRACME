@@ -10,13 +10,14 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QGroupBox, QFileDialog,
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QSize, QTimer
+from PySide6.QtGui import QIcon
 
 from src.application.container import Container
 from src.presentation.viewmodels.app_state import AppStateVM
 from src.presentation.viewmodels.process_vm import ProcessVM
 from src.presentation.widgets.data_table import DataTable
-from src.presentation.constants import MODULE_ICONS
+from src.presentation.constants import MODULE_ICONS, ICON_FOLDER
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
 
@@ -46,6 +47,14 @@ class ProcessView(QWidget):
 
         # Directorio de salida
         output_layout = QHBoxLayout()
+        folder_icon = QLabel()
+        folder_pixmap = QIcon(ICON_FOLDER).pixmap(QSize(24, 24))
+        folder_icon.setPixmap(folder_pixmap)
+        folder_icon.setFixedSize(28, 28)
+        folder_icon.setStyleSheet("background: transparent;")
+        folder_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        output_layout.addWidget(folder_icon)
+
         output_layout.addWidget(QLabel("Directorio de salida:"))
         self._output_label = QLabel(self._state.output_dir or "No seleccionado")
         self._output_label.setFont(get_font("body_sm"))

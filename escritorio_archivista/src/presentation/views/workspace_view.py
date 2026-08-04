@@ -11,14 +11,17 @@ from PySide6.QtWidgets import (
     QSpinBox, QLineEdit, QFileDialog, QGroupBox, QGridLayout,
     QSizePolicy,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QPixmap
 
 from src.application.container import Container
 from src.presentation.viewmodels.app_state import AppStateVM
 from src.presentation.viewmodels.workspace_vm import WorkspaceVM
 from src.presentation.widgets.data_table import DataTable
 from src.presentation.widgets.search_bar import SearchBar
-from src.presentation.constants import MODULE_ICONS
+from src.presentation.constants import (
+    ICON_EXCEL_LIGHT, ICON_EXCEL_DARK, ICON_PDF_LIGHT, ICON_PDF_DARK,
+)
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
 
@@ -31,13 +34,20 @@ class DropZone(QWidget):
     La cabecera identifica el tipo de archivo (Excel o PDF) y el cuerpo
     muestra el estado de carga; al cargarse un archivo se exhibe el nombre
     con elisión profesional y la ruta completa como tooltip.
+
+    El ícono del documento (``icon_light``/``icon_dark``) alterna según el
+    tema activo de la aplicación.
     """
 
-    def __init__(self, icon: str, title: str, extensions: str, parent=None):
+    ICON_DISPLAY_SIZE = QSize(52, 52)
+
+    def __init__(self, icon_light: str, icon_dark: str, title: str,
+                 extensions: str, parent=None):
         super().__init__(parent)
         self._extensions = extensions
         self._title = title
-        self._icon = icon
+        self._icon_light = icon_light
+        self._icon_dark = icon_dark
         self._file_path = None
         self._filename = None
         self._hovered = False
@@ -59,7 +69,7 @@ class DropZone(QWidget):
         title_layout = QHBoxLayout(title_bar)
         title_layout.setContentsMargins(12, 0, 12, 0)
 
-        self._title_label = QLabel(f"{icon}  {title}")
+        self._title_label = QLabel(title)
         self._title_label.setFont(get_font("body_sm_bold"))
         title_layout.addWidget(self._title_label)
         title_layout.addStretch()
@@ -72,10 +82,14 @@ class DropZone(QWidget):
         body_layout.setContentsMargins(12, 18, 12, 18)
         body_layout.setSpacing(4)
 
-        self._icon_label = QLabel(icon)
-        self._icon_label.setFont(get_font("icon_lg"))
+        self._icon_label = QLabel()
+        self._icon_label.setFixedHeight(self.ICON_DISPLAY_SIZE.height())
+        self._icon_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._icon_label.setStyleSheet("background: transparent;")
+        self._update_icon(False)
         body_layout.addWidget(self._icon_label)
 
         self._status_label = QLabel("Sin archivo cargado")
@@ -117,6 +131,20 @@ class DropZone(QWidget):
             f"border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;"
         )
 
+    def _update_icon(self, dark: bool):
+        """Muestra el ícono del documento según el tema activo."""
+        path = self._icon_dark if dark else self._icon_light
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            return
+        self._icon_label.setPixmap(
+            pixmap.scaled(
+                self.ICON_DISPLAY_SIZE,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
     def _elide(self, text: str, max_width: int) -> str:
         fm = self._status_label.fontMetrics()
         return fm.elidedText(text, Qt.TextElideMode.ElideMiddle, max_width)
@@ -144,6 +172,7 @@ class DropZone(QWidget):
     def apply_theme(self, dark: bool):
         """Reaplica el estilo al cambiar el tema."""
         self._palette = get_palette(dark)
+        self._update_icon(dark)
         self._status_label.setStyleSheet(
             f"color: {self._palette['text_primary']}; background: transparent;"
         )
@@ -215,12 +244,12 @@ class WorkspaceView(QWidget):
         step1_layout.setSpacing(16)
 
         self._excel_drop = DropZone(
-            MODULE_ICONS["workspace"], "INVENTARIO EXCEL", "*.xlsx"
+            ICON_EXCEL_LIGHT, ICON_EXCEL_DARK, "INVENTARIO EXCEL", "*.xlsx"
         )
         step1_layout.addWidget(self._excel_drop, stretch=1)
 
         self._pdf_drop = DropZone(
-            MODULE_ICONS["pdf_editor"], "PDF ORIGINAL", "*.pdf"
+            ICON_PDF_LIGHT, ICON_PDF_DARK, "PDF ORIGINAL", "*.pdf"
         )
         step1_layout.addWidget(self._pdf_drop, stretch=1)
 

@@ -9,7 +9,9 @@ from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QPushButton,
 )
 from PySide6.QtCore import Signal, Qt
+from PySide6.QtGui import QIcon
 
+from src.presentation.constants import ICON_MOON, ICON_SUN
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
 
@@ -82,12 +84,14 @@ class Header(QWidget):
         layout.addWidget(self._dual_btn)
 
         # Toggle tema
-        self._theme_btn = QPushButton("\u263D")
+        self._theme_btn = QPushButton()
         self._theme_btn.setProperty("flat", True)
         self._theme_btn.setFixedSize(30, 30)
         self._theme_btn.setToolTip("Cambiar tema claro/oscuro")
         self._theme_btn.clicked.connect(self._on_theme_toggle)
+        self._theme_btn.setIconSize(self._theme_btn.size())
         layout.addWidget(self._theme_btn)
+        self._update_theme_icon()
 
     def _on_dual_toggle(self):
         self._dual_view = self._dual_btn.isChecked()
@@ -98,11 +102,18 @@ class Header(QWidget):
 
     def _on_theme_toggle(self):
         self._dark_mode = not self._dark_mode
-        self._theme_btn.setText("\u2600" if self._dark_mode else "\u263D")
+        self._update_theme_icon()
         self.theme_toggled.emit(self._dark_mode)
+
+    def _update_theme_icon(self):
+        """Muestra la luna en modo oscuro y el sol en modo claro."""
+        icon = ICON_MOON if self._dark_mode else ICON_SUN
+        self._theme_btn.setIcon(QIcon(icon))
 
     def apply_theme(self, dark: bool):
         """Reaplica los estilos dependientes del tema."""
+        self._dark_mode = dark
+        self._update_theme_icon()
         self._palette = get_palette(dark)
         self.setStyleSheet(
             f"background-color: {self._palette['surface']}; "

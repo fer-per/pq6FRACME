@@ -5,24 +5,57 @@ Barra lateral con botones de navegación, collapse/expand,
 y botón activo resaltado. Inspiración: Obsidian/VSCode.
 """
 import logging
+import os
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QSizePolicy,
 )
 from PySide6.QtCore import Signal, Qt, QSize, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon, QMovie
 
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
 from src.presentation.constants import (
     ViewId, MODULE_ICONS, SIDEBAR_WIDTH_EXPANDED, SIDEBAR_WIDTH_COLLAPSED,
-    ANIMATION_DURATION_MS,
+    SIDEBAR_ICON_SIZE, ANIMATION_DURATION_MS,
+    ICON_WORKSPACE, ICON_ANALYZER, ICON_EXCLUSIONS, ICON_PROCESS, ICON_PDF_EDITOR,
+    ICON_MENU,
 )
 
 logger = logging.getLogger(__name__)
 
-# Ícono del botón de colapso (menú)
-MENU_ICON = "\u2630"  # ☰
+
+class MenuToggleButton(QPushButton):
+    """Botón de colapso del sidebar con animación al hacer hover.
+
+    Reproduce el webp animado ``menu.webp`` mientras el cursor está sobre
+    el botón; al salir, vuelve a su estado estático.
+    """
+
+    def __init__(self, text: str, movie_path: str, parent=None):
+        super().__init__(text, parent)
+        self._hovered = False
+        self._movie = QMovie(movie_path)
+        self._movie.setScaledSize(QSize(SIDEBAR_ICON_SIZE, SIDEBAR_ICON_SIZE))
+        self._movie.frameChanged.connect(self._on_frame)
+        self.setIconSize(QSize(SIDEBAR_ICON_SIZE, SIDEBAR_ICON_SIZE))
+
+    def _on_frame(self, frame: int):
+        if self._hovered:
+            self.setIcon(QIcon(self._movie.currentPixmap()))
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self._hovered = True
+        if self._movie.isValid():
+            self.setIcon(QIcon(self._movie.currentPixmap()))
+            self._movie.start()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._hovered = False
+        self._movie.stop()
+        self.setIcon(QIcon())
 
 
 class SidebarButton(QPushButton):
@@ -32,25 +65,35 @@ class SidebarButton(QPushButton):
     propiedad ``sidebar="true"``, de modo que sigue el tema activo.
     """
 
-    def __init__(self, icon_text: str, label: str, view_id: int, parent=None):
+    def __init__(self, icon: str, label: str, view_id: int, parent=None):
         super().__init__(parent)
         self.view_id = view_id
-        self._icon_text = icon_text
+        self._icon = icon
         self._label = label
 
         self.setProperty("sidebar", True)
-        self.setText(f"  {icon_text}   {label}")
         self.setFont(get_font("body"))
         self.setFixedHeight(40)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setCheckable(True)
 
+        if os.path.exists(icon):
+            self.setIcon(QIcon(icon))
+            self.setIconSize(QSize(SIDEBAR_ICON_SIZE, SIDEBAR_ICON_SIZE))
+        else:
+            self._icon_text = icon
+        self.set_collapsed(False)
+
     def set_collapsed(self, collapsed: bool):
+        text_icon = getattr(self, "_icon_text", None)
         if collapsed:
-            self.setText(f"  {self._icon_text}")
+            self.setText(f"  {text_icon}" if text_icon else "")
             self.setToolTip(self._label)
         else:
-            self.setText(f"  {self._icon_text}   {self._label}")
+            if text_icon:
+                self.setText(f"  {text_icon}   {self._label}")
+            else:
+                self.setText(f"  {self._label}")
             self.setToolTip("")
 
     def set_active(self, active: bool):
@@ -63,11 +106,11 @@ class Sidebar(QWidget):
     navigation_requested = Signal(int)
 
     NAV_ITEMS = [
-        (MODULE_ICONS["workspace"],  "Espacio de Trabajo",  ViewId.WORKSPACE),
-        (MODULE_ICONS["analyzer"],   "Analizador",          ViewId.ANALYZER),
-        (MODULE_ICONS["exclusions"], "Exclusiones",          ViewId.EXCLUSIONS),
-        (MODULE_ICONS["process"],    "Fragmentar",           ViewId.PROCESS),
-        (MODULE_ICONS["pdf_editor"], "Editor PDF",           ViewId.PDF_EDITOR),
+        (ICON_WORKSPACE, "Espacio de Trabajo", ViewId.WORKSPACE),
+        (ICON_ANALYZER,  "Analizador",         ViewId.ANALYZER),
+        (ICON_EXCLUSIONS,"Exclusiones",         ViewId.EXCLUSIONS),
+        (ICON_PROCESS,   "Fragmentar",          ViewId.PROCESS),
+        (ICON_PDF_EDITOR,"Editor PDF",          ViewId.PDF_EDITOR),
     ]
 
     BOTTOM_ITEMS = [
@@ -93,7 +136,7 @@ class Sidebar(QWidget):
         layout.setContentsMargins(0, 8, 0, 8)
         layout.setSpacing(2)
 
-        self._toggle_btn = QPushButton(f"  {MENU_ICON}   Menú")
+        self._toggle_btn = MenuToggleButton("  Menú", ICON_MENU)
         self._toggle_btn.setProperty("sidebar", True)
         self._toggle_btn.setFixedHeight(36)
         self._toggle_btn.setFont(get_font("body_sm_bold"))
@@ -159,9 +202,9 @@ class Sidebar(QWidget):
             btn.set_collapsed(self._collapsed)
 
         if self._collapsed:
-            self._toggle_btn.setText(f"  {MENU_ICON}")
+            self._toggle_btn.setText("")
         else:
-            self._toggle_btn.setText(f"  {MENU_ICON}   Menú")
+            self._toggle_btn.setText("  Menú")
 
     def set_active_view(self, view_id: int):
         self._update_active(view_id)
