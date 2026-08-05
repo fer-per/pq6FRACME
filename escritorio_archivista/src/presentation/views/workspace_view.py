@@ -20,7 +20,7 @@ from src.presentation.widgets.data_table import DataTable
 from src.presentation.widgets.search_bar import SearchBar
 from src.presentation.constants import (
     ICON_EXCEL, ICON_PDF,
-    ICON_SAVE, ICON_ANALYZE_CAM, TOOLBAR_ICON_SIZE,
+    ICON_SAVE, ICON_ANALYZER, TOOLBAR_ICON_SIZE,
 )
 from src.presentation.theme.icons import theme_icon, white_icon, tinted_pixmap
 from src.presentation.theme.colors import get_palette
@@ -79,7 +79,7 @@ class DropZone(QWidget):
         self._body = QWidget()
         body_layout = QVBoxLayout(self._body)
         body_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        body_layout.setContentsMargins(12, 9, 12, 9)
+        body_layout.setContentsMargins(12, 18, 12, 18)
         body_layout.setSpacing(4)
 
         self._icon_label = QLabel()
@@ -317,7 +317,7 @@ class WorkspaceView(QWidget):
         self._expand_btn = QPushButton("Analizador \u2192")
         self._expand_btn.setProperty("flat", True)
         self._expand_btn.setFixedHeight(32)
-        self._expand_btn.setIcon(theme_icon(ICON_ANALYZE_CAM, False))
+        self._expand_btn.setIcon(theme_icon(ICON_ANALYZER, False))
         self._expand_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         top_bar.addWidget(self._expand_btn)
         step3_layout.addLayout(top_bar)
@@ -432,7 +432,6 @@ class WorkspaceView(QWidget):
         self._excel_drop.apply_theme(dark)
         self._pdf_drop.apply_theme(dark)
         self._save_config_btn.setIcon(white_icon(ICON_SAVE))
-        self._expand_btn.setIcon(theme_icon(ICON_ANALYZE_CAM, dark))
         self._search.apply_theme(dark)
         self._count_label.setStyleSheet(
             f"color: {self._palette['text_secondary']};"
