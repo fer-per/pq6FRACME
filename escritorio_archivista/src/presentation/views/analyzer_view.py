@@ -11,15 +11,19 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
     QTabWidget, QSizePolicy,
 )
+from PySide6.QtCore import QSize
 
 from src.application.container import Container
 from src.presentation.viewmodels.app_state import AppStateVM
 from src.presentation.viewmodels.analyzer_vm import AnalyzerVM
-from src.presentation.constants import MODULE_ICONS
+from src.presentation.constants import (
+    TOOLBAR_ICON_SIZE, ICON_ANALYZE, ICON_CORRECT,
+)
 from src.presentation.widgets.data_table import DataTable
 from src.presentation.widgets.correction_modal import CorrectionModal
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
+from src.presentation.theme.icons import theme_icon, white_icon
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +281,16 @@ class AnalyzerView(QWidget):
 
         # Header
         header = QHBoxLayout()
-        title = QLabel(f"{MODULE_ICONS['analyzer']}  Analizador de Inventario")
+        self._heading_icon = QLabel()
+        self._heading_icon.setPixmap(
+            theme_icon(ICON_ANALYZE, False).pixmap(
+                QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE)
+            )
+        )
+        self._heading_icon.setStyleSheet("background: transparent;")
+        header.addWidget(self._heading_icon)
+
+        title = QLabel("Analizador de Inventario")
         title.setProperty("heading", True)
         header.addWidget(title)
         header.addStretch()
@@ -287,8 +300,10 @@ class AnalyzerView(QWidget):
         self._total_label.setStyleSheet(f"color: {self._palette['text_secondary']};")
         header.addWidget(self._total_label)
 
-        self._analyze_btn = QPushButton("\u27F3  Ejecutar Análisis")
+        self._analyze_btn = QPushButton(" Ejecutar Análisis")
         self._analyze_btn.setFixedHeight(34)
+        self._analyze_btn.setIcon(white_icon(ICON_ANALYZE))
+        self._analyze_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         self._analyze_btn.clicked.connect(self._vm.run_analysis)
         header.addWidget(self._analyze_btn)
         layout.addLayout(header)
@@ -337,8 +352,10 @@ class AnalyzerView(QWidget):
         btn_layout.addWidget(tip)
         btn_layout.addStretch()
 
-        self._correct_btn = QPushButton("\u270E  Corregir Seleccionado")
+        self._correct_btn = QPushButton(" Corregir Seleccionado")
         self._correct_btn.setEnabled(False)
+        self._correct_btn.setIcon(theme_icon(ICON_CORRECT, False))
+        self._correct_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         self._correct_btn.clicked.connect(self._on_correct)
         btn_layout.addWidget(self._correct_btn)
         layout.addLayout(btn_layout)
@@ -435,6 +452,13 @@ class AnalyzerView(QWidget):
     def apply_theme(self, dark: bool):
         """Reaplica el tema a paneles, pestañas y etiquetas."""
         self._palette = get_palette(dark)
+        self._heading_icon.setPixmap(
+            theme_icon(ICON_ANALYZE, dark).pixmap(
+                QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE)
+            )
+        )
+        self._analyze_btn.setIcon(white_icon(ICON_ANALYZE))
+        self._correct_btn.setIcon(theme_icon(ICON_CORRECT, dark))
         self._total_label.setStyleSheet(
             f"color: {self._palette['text_secondary']};"
         )

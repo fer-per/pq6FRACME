@@ -8,10 +8,14 @@ import logging
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QPushButton,
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QSize
 from PySide6.QtGui import QIcon
 
-from src.presentation.constants import ICON_MOON, ICON_SUN
+from src.presentation.constants import (
+    ICON_MOON, ICON_SUN, ICON_SAVE, ICON_VIEW_FULL, ICON_VIEW_SPLIT,
+    TOOLBAR_ICON_SIZE,
+)
+from src.presentation.theme.icons import theme_icon
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
 
@@ -66,27 +70,31 @@ class Header(QWidget):
         layout.addStretch()
 
         # Botón guardar
-        self._save_btn = QPushButton("\u2B07 Guardar")
+        self._save_btn = QPushButton(" Guardar")
         self._save_btn.setProperty("flat", True)
-        self._save_btn.setFixedHeight(30)
+        self._save_btn.setFixedHeight(25)
+        self._save_btn.setIcon(theme_icon(ICON_SAVE, self._dark_mode))
+        self._save_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         self._save_btn.setToolTip("Guardar sesión (Ctrl+S)")
         self._save_btn.clicked.connect(self.save_requested.emit)
         layout.addWidget(self._save_btn)
 
         # Toggle dual view
-        self._dual_btn = QPushButton("\u25A8 Vista Dual")
+        self._dual_btn = QPushButton()
         self._dual_btn.setProperty("flat", True)
         self._dual_btn.setFixedHeight(30)
         self._dual_btn.setCheckable(True)
         self._dual_btn.setChecked(True)
+        self._dual_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         self._dual_btn.setToolTip("Mostrar/ocultar vista previa del PDF")
         self._dual_btn.clicked.connect(self._on_dual_toggle)
         layout.addWidget(self._dual_btn)
+        self._update_dual_button()
 
         # Toggle tema
         self._theme_btn = QPushButton()
         self._theme_btn.setProperty("flat", True)
-        self._theme_btn.setFixedSize(30, 30)
+        self._theme_btn.setFixedSize(25, 25)
         self._theme_btn.setToolTip("Cambiar tema claro/oscuro")
         self._theme_btn.clicked.connect(self._on_theme_toggle)
         self._theme_btn.setIconSize(self._theme_btn.size())
@@ -95,10 +103,17 @@ class Header(QWidget):
 
     def _on_dual_toggle(self):
         self._dual_view = self._dual_btn.isChecked()
-        self._dual_btn.setText(
-            "\u25A8 Vista Dual" if self._dual_view else "\u25A1 Vista Simple"
-        )
+        self._update_dual_button()
         self.dual_view_toggled.emit(self._dual_view)
+
+    def _update_dual_button(self):
+        """Vista partida (prevía visible) o completa (prevía oculta)."""
+        if self._dual_view:
+            self._dual_btn.setText(" Vista Partida")
+            self._dual_btn.setIcon(theme_icon(ICON_VIEW_SPLIT, self._dark_mode))
+        else:
+            self._dual_btn.setText(" Vista Completa")
+            self._dual_btn.setIcon(theme_icon(ICON_VIEW_FULL, self._dark_mode))
 
     def _on_theme_toggle(self):
         self._dark_mode = not self._dark_mode
@@ -114,6 +129,8 @@ class Header(QWidget):
         """Reaplica los estilos dependientes del tema."""
         self._dark_mode = dark
         self._update_theme_icon()
+        self._save_btn.setIcon(theme_icon(ICON_SAVE, dark))
+        self._update_dual_button()
         self._palette = get_palette(dark)
         self.setStyleSheet(
             f"background-color: {self._palette['surface']}; "

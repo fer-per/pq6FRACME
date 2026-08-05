@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QPixmap
 
 from src.application.container import Container
 from src.presentation.viewmodels.app_state import AppStateVM
@@ -20,8 +19,10 @@ from src.presentation.viewmodels.workspace_vm import WorkspaceVM
 from src.presentation.widgets.data_table import DataTable
 from src.presentation.widgets.search_bar import SearchBar
 from src.presentation.constants import (
-    ICON_EXCEL_LIGHT, ICON_EXCEL_DARK, ICON_PDF_LIGHT, ICON_PDF_DARK,
+    ICON_EXCEL, ICON_PDF,
+    ICON_SAVE, ICON_ANALYZE_CAM, TOOLBAR_ICON_SIZE,
 )
+from src.presentation.theme.icons import theme_icon, white_icon, tinted_pixmap
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
 
@@ -35,19 +36,18 @@ class DropZone(QWidget):
     muestra el estado de carga; al cargarse un archivo se exhibe el nombre
     con elisión profesional y la ruta completa como tooltip.
 
-    El ícono del documento (``icon_light``/``icon_dark``) alterna según el
-    tema activo de la aplicación.
+    El ícono del documento (``icon_path``) es una silueta que se recoloriza
+    según el tema activo de la aplicación.
     """
 
-    ICON_DISPLAY_SIZE = QSize(52, 52)
+    ICON_DISPLAY_SIZE = QSize(35, 35)
 
-    def __init__(self, icon_light: str, icon_dark: str, title: str,
+    def __init__(self, icon_path: str, title: str,
                  extensions: str, parent=None):
         super().__init__(parent)
         self._extensions = extensions
         self._title = title
-        self._icon_light = icon_light
-        self._icon_dark = icon_dark
+        self._icon_path = icon_path
         self._file_path = None
         self._filename = None
         self._hovered = False
@@ -79,7 +79,7 @@ class DropZone(QWidget):
         self._body = QWidget()
         body_layout = QVBoxLayout(self._body)
         body_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        body_layout.setContentsMargins(12, 18, 12, 18)
+        body_layout.setContentsMargins(12, 9, 12, 9)
         body_layout.setSpacing(4)
 
         self._icon_label = QLabel()
@@ -132,9 +132,8 @@ class DropZone(QWidget):
         )
 
     def _update_icon(self, dark: bool):
-        """Muestra el ícono del documento según el tema activo."""
-        path = self._icon_dark if dark else self._icon_light
-        pixmap = QPixmap(path)
+        """Muestra el ícono del documento recolorizado según el tema."""
+        pixmap = tinted_pixmap(self._icon_path, dark)
         if pixmap.isNull():
             return
         self._icon_label.setPixmap(
@@ -244,12 +243,12 @@ class WorkspaceView(QWidget):
         step1_layout.setSpacing(16)
 
         self._excel_drop = DropZone(
-            ICON_EXCEL_LIGHT, ICON_EXCEL_DARK, "INVENTARIO EXCEL", "*.xlsx"
+            ICON_EXCEL, "INVENTARIO EXCEL", "*.xlsx"
         )
         step1_layout.addWidget(self._excel_drop, stretch=1)
 
         self._pdf_drop = DropZone(
-            ICON_PDF_LIGHT, ICON_PDF_DARK, "PDF ORIGINAL", "*.pdf"
+            ICON_PDF, "PDF ORIGINAL", "*.pdf"
         )
         step1_layout.addWidget(self._pdf_drop, stretch=1)
 
@@ -286,15 +285,17 @@ class WorkspaceView(QWidget):
         self._folio_inicio_input.setFixedWidth(80)
         step2_grid.addWidget(self._folio_inicio_input, 0, 7)
 
-        step2_grid.addWidget(QLabel("Pág. PDF Inicio:"), 0, 6)
+        step2_grid.addWidget(QLabel("Pág. PDF Inicio:"), 1, 0)
         self._pag_pdf_spin = QSpinBox()
         self._pag_pdf_spin.setRange(0, 99999)
         self._pag_pdf_spin.setValue(self._state.pag_pdf_inicio)
         self._pag_pdf_spin.setFixedWidth(80)
-        step2_grid.addWidget(self._pag_pdf_spin, 0, 7)
+        step2_grid.addWidget(self._pag_pdf_spin, 1, 1)
 
-        self._save_config_btn = QPushButton("\u2B07 Guardar Cambios")
+        self._save_config_btn = QPushButton(" Guardar Cambios")
         self._save_config_btn.setFixedHeight(32)
+        self._save_config_btn.setIcon(white_icon(ICON_SAVE))
+        self._save_config_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         step2_grid.addWidget(self._save_config_btn, 1, 6, 1, 2)
 
         layout.addWidget(step2)
@@ -316,6 +317,8 @@ class WorkspaceView(QWidget):
         self._expand_btn = QPushButton("Analizador \u2192")
         self._expand_btn.setProperty("flat", True)
         self._expand_btn.setFixedHeight(32)
+        self._expand_btn.setIcon(theme_icon(ICON_ANALYZE_CAM, False))
+        self._expand_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         top_bar.addWidget(self._expand_btn)
         step3_layout.addLayout(top_bar)
 
@@ -428,6 +431,9 @@ class WorkspaceView(QWidget):
         self._palette = get_palette(dark)
         self._excel_drop.apply_theme(dark)
         self._pdf_drop.apply_theme(dark)
+        self._save_config_btn.setIcon(white_icon(ICON_SAVE))
+        self._expand_btn.setIcon(theme_icon(ICON_ANALYZE_CAM, dark))
+        self._search.apply_theme(dark)
         self._count_label.setStyleSheet(
             f"color: {self._palette['text_secondary']};"
         )

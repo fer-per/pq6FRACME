@@ -5,11 +5,15 @@ Genera QSS a partir de la paleta de colores activa,
 permitiendo cambiar entre tema claro y oscuro en tiempo de ejecución.
 """
 from src.presentation.theme.colors import get_palette
+from src.presentation.theme.icons import tinted_pixmap_file
+from src.presentation.constants import ICON_MOVE_UP, ICON_MOVE_DOWN
 
 
 def generate_stylesheet(dark: bool = False) -> str:
     """Genera la hoja de estilo QSS completa para la aplicación."""
     p = get_palette(dark)
+    arrow_up = tinted_pixmap_file(ICON_MOVE_UP, dark, "spin_up")
+    arrow_down = tinted_pixmap_file(ICON_MOVE_DOWN, dark, "spin_down")
     return f"""
     /* ═══ GLOBAL ═══ */
     QMainWindow {{
@@ -140,6 +144,16 @@ def generate_stylesheet(dark: bool = False) -> str:
     }}
     QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
         background: {p['surface_high']};
+    }}
+    QSpinBox::up-arrow {{
+        image: url({arrow_up});
+        width: 12px;
+        height: 12px;
+    }}
+    QSpinBox::down-arrow {{
+        image: url({arrow_down});
+        width: 12px;
+        height: 12px;
     }}
 
     /* ═══ COMBO BOX ═══ */

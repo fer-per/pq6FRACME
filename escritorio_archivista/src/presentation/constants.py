@@ -23,6 +23,7 @@ SIDEBAR_WIDTH_COLLAPSED = 52
 SIDEBAR_ICON_SIZE = 20
 PDF_THUMBNAIL_WIDTH = 130
 PDF_THUMBNAIL_HEIGHT = 184
+TOOLBAR_ICON_SIZE = 18
 MIN_WINDOW_WIDTH = 1200
 MIN_WINDOW_HEIGHT = 750
 
@@ -51,22 +52,53 @@ MODULE_ICON_DIRS = {
 
 ICON_WORKSPACE = str(MODULE_ICON_DIRS["workspace"] / "espaciotrabajo.ico")
 ICON_ANALYZER = str(MODULE_ICON_DIRS["analyzer"] / "analizador.ico")
+ICON_ANALYZE_CAM = str(MODULE_ICON_DIRS["analyzer"] / "camanalizador.ico")
 ICON_EXCLUSIONS = str(MODULE_ICON_DIRS["exclusions"] / "exclusiones.ico")
 ICON_PROCESS = str(MODULE_ICON_DIRS["process"] / "fragmentar.ico")
 ICON_PDF_EDITOR = str(MODULE_ICON_DIRS["pdf_editor"] / "editorpdf.ico")
 
+# Íconos de acciones del analizador
+ICON_ANALYZE = str(MODULE_ICON_DIRS["analyzer"] / "creeper.ico")
+ICON_CORRECT = str(MODULE_ICON_DIRS["analyzer"] / "corregir.ico")
+
+# Íconos de acciones del editor de PDF (toolbar)
+ICON_MOVE_UP = str(MODULE_ICON_DIRS["pdf_editor"] / "arriba.ico")
+ICON_MOVE_DOWN = str(MODULE_ICON_DIRS["pdf_editor"] / "abajo.ico")
+ICON_EXCLUDE = str(MODULE_ICON_DIRS["pdf_editor"] / "excluir.ico")
+ICON_UNDO = str(MODULE_ICON_DIRS["pdf_editor"] / "deshacer.ico")
+ICON_REDO = str(MODULE_ICON_DIRS["pdf_editor"] / "rehacer.ico")
+
+# Íconos de acciones compartidas (usados por varios módulos)
+ACCIONES_ICONS_DIR = ICONS_DIR / "acciones"
+ICON_SAVE = str(ACCIONES_ICONS_DIR / "guardar.ico")
+
+# Íconos del toggle de vista del PDF (header)
+HEADER_ICONS_DIR = ICONS_DIR / "header"
+ICON_VIEW_FULL = str(HEADER_ICONS_DIR / "vistacompleta.ico")  # vista previa oculta
+ICON_VIEW_SPLIT = str(HEADER_ICONS_DIR / "vistapartida.ico")  # vista previa visible
+
+# Íconos de navegación y zoom de la vista previa del PDF
+PDFPREVIEW_ICONS_DIR = ICONS_DIR / "pdfpreview"
+ICON_PREV_PAGE = str(PDFPREVIEW_ICONS_DIR / "flecha-atras.ico")
+ICON_NEXT_PAGE = str(PDFPREVIEW_ICONS_DIR / "flecha-siguiente.ico")
+ICON_ZOOM_OUT = str(PDFPREVIEW_ICONS_DIR / "menos.ico")
+ICON_ZOOM_IN = str(PDFPREVIEW_ICONS_DIR / "mas.ico")
+
+# Ícono de búsqueda (SearchBar)
+SEARCH_ICONS_DIR = ICONS_DIR / "search"
+ICON_SEARCH = str(SEARCH_ICONS_DIR / "lupa.ico")
+
 # Ícono de selección de carpeta (fragmentación)
 ICON_FOLDER = str(MODULE_ICON_DIRS["process"] / "carpeta.webp")
+ICON_SELECT = str(MODULE_ICON_DIRS["process"] / "documento.ico")
 
 # Animación del botón Menú (sidebar)
 ICON_MENU = str(ICONS_DIR / "menu" / "menu.webp")
 
-# Íconos de carga de documentos (DropZone del workspace): alternan según tema
-# En tema claro (fondo claro) se usan íconos oscuros; en oscuro, íconos claros.
-ICON_EXCEL_LIGHT = str(MODULE_ICON_DIRS["workspace"] / "excelnegro.ico")   # tema claro → ícono negro
-ICON_EXCEL_DARK = str(MODULE_ICON_DIRS["workspace"] / "excelblanco.ico")   # tema oscuro → ícono blanco
-ICON_PDF_LIGHT = str(MODULE_ICON_DIRS["workspace"] / "pdfnegro.ico")       # tema claro → ícono negro
-ICON_PDF_DARK = str(MODULE_ICON_DIRS["workspace"] / "pdfblanco.ico")       # tema oscuro → ícono blanco
+# Íconos de carga de documentos (DropZone del workspace): siluetas negras
+# que se recolorizan según el tema (negro en claro, blanco en oscuro).
+ICON_EXCEL = str(MODULE_ICON_DIRS["workspace"] / "excelnegro.ico")
+ICON_PDF = str(MODULE_ICON_DIRS["workspace"] / "pdfnegro.ico")
 
 
 class ModuleIcon:

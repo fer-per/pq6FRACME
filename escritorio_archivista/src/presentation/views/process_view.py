@@ -17,7 +17,10 @@ from src.application.container import Container
 from src.presentation.viewmodels.app_state import AppStateVM
 from src.presentation.viewmodels.process_vm import ProcessVM
 from src.presentation.widgets.data_table import DataTable
-from src.presentation.constants import MODULE_ICONS, ICON_FOLDER
+from src.presentation.constants import (
+    ICON_FOLDER, ICON_SELECT, ICON_PROCESS, TOOLBAR_ICON_SIZE,
+)
+from src.presentation.theme.icons import theme_icon, white_icon
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
 
@@ -41,9 +44,21 @@ class ProcessView(QWidget):
         layout.setSpacing(12)
 
         # Header
-        title = QLabel(f"{MODULE_ICONS['process']}  Fragmentar PDF Maestro")
+        header_layout = QHBoxLayout()
+        self._heading_icon = QLabel()
+        self._heading_icon.setPixmap(
+            theme_icon(ICON_PROCESS, False).pixmap(
+                QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE)
+            )
+        )
+        self._heading_icon.setStyleSheet("background: transparent;")
+        header_layout.addWidget(self._heading_icon)
+
+        title = QLabel("Fragmentar PDF Maestro")
         title.setProperty("heading", True)
-        layout.addWidget(title)
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
 
         # Directorio de salida
         output_layout = QHBoxLayout()
@@ -63,8 +78,10 @@ class ProcessView(QWidget):
         )
         output_layout.addWidget(self._output_label, stretch=1)
 
-        self._select_dir_btn = QPushButton("\u25A3 Seleccionar")
+        self._select_dir_btn = QPushButton(" Seleccionar")
         self._select_dir_btn.setProperty("flat", True)
+        self._select_dir_btn.setIcon(theme_icon(ICON_SELECT, False))
+        self._select_dir_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         self._select_dir_btn.clicked.connect(self._on_select_dir)
         output_layout.addWidget(self._select_dir_btn)
         layout.addLayout(output_layout)
@@ -74,9 +91,11 @@ class ProcessView(QWidget):
         action_layout = QVBoxLayout(action_group)
 
         btn_row = QHBoxLayout()
-        self._fragment_btn = QPushButton("\u2702  FRAGMENTAR PDF")
+        self._fragment_btn = QPushButton("  FRAGMENTAR PDF")
         self._fragment_btn.setFont(get_font("button_lg"))
         self._fragment_btn.setFixedHeight(44)
+        self._fragment_btn.setIcon(white_icon(ICON_PROCESS))
+        self._fragment_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         self._fragment_btn.clicked.connect(self._vm.start_fragmentation)
         btn_row.addWidget(self._fragment_btn)
 
@@ -164,7 +183,7 @@ class ProcessView(QWidget):
         QTimer.singleShot(3000, self._reset_button)
 
     def _reset_button(self):
-        self._fragment_btn.setText("\u2702  FRAGMENTAR PDF")
+        self._fragment_btn.setText("  FRAGMENTAR PDF")
         self._fragment_btn.setEnabled(True)
         self._progress.setVisible(False)
 
@@ -174,6 +193,13 @@ class ProcessView(QWidget):
     def apply_theme(self, dark: bool):
         """Reaplica el tema a etiquetas y tabla de la vista."""
         self._palette = get_palette(dark)
+        self._heading_icon.setPixmap(
+            theme_icon(ICON_PROCESS, dark).pixmap(
+                QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE)
+            )
+        )
+        self._select_dir_btn.setIcon(theme_icon(ICON_SELECT, dark))
+        self._fragment_btn.setIcon(white_icon(ICON_PROCESS))
         self._output_label.setStyleSheet(
             f"color: {self._palette['text_secondary']};"
         )

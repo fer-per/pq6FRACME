@@ -15,6 +15,7 @@ from PySide6.QtGui import QFont, QIcon, QMovie
 
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
+from src.presentation.theme.icons import theme_icon
 from src.presentation.constants import (
     ViewId, MODULE_ICONS, SIDEBAR_WIDTH_EXPANDED, SIDEBAR_WIDTH_COLLAPSED,
     SIDEBAR_ICON_SIZE, ANIMATION_DURATION_MS,
@@ -70,6 +71,7 @@ class SidebarButton(QPushButton):
         self.view_id = view_id
         self._icon = icon
         self._label = label
+        self._icon_path = icon if os.path.exists(icon) else None
 
         self.setProperty("sidebar", True)
         self.setFont(get_font("body"))
@@ -77,12 +79,17 @@ class SidebarButton(QPushButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setCheckable(True)
 
-        if os.path.exists(icon):
-            self.setIcon(QIcon(icon))
+        if self._icon_path:
+            self.setIcon(theme_icon(self._icon_path, False))
             self.setIconSize(QSize(SIDEBAR_ICON_SIZE, SIDEBAR_ICON_SIZE))
         else:
             self._icon_text = icon
         self.set_collapsed(False)
+
+    def set_dark(self, dark: bool):
+        """Reaplica el ícono recolorizado según el tema."""
+        if self._icon_path:
+            self.setIcon(theme_icon(self._icon_path, dark))
 
     def set_collapsed(self, collapsed: bool):
         text_icon = getattr(self, "_icon_text", None)
@@ -213,3 +220,5 @@ class Sidebar(QWidget):
         """Reaplica los estilos dependientes del tema."""
         self._palette = get_palette(dark)
         self._apply_background()
+        for btn in self._buttons:
+            btn.set_dark(dark)

@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QGridLayout, QSizePolicy, QToolBar,
 )
-from PySide6.QtCore import Qt, Signal, QObject, QRunnable, QThreadPool, Slot
+from PySide6.QtCore import Qt, QSize, Signal, QObject, QRunnable, QThreadPool, Slot
 from PySide6.QtGui import QPixmap, QImage, QColor, QPainter
 
 from src.application.container import Container
@@ -15,7 +15,12 @@ from src.presentation.viewmodels.app_state import AppStateVM
 from src.presentation.viewmodels.pdf_editor_vm import PDFEditorVM
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
-from src.presentation.constants import PDF_THUMBNAIL_WIDTH, PDF_THUMBNAIL_HEIGHT
+from src.presentation.theme.icons import theme_icon
+from src.presentation.constants import (
+    PDF_THUMBNAIL_WIDTH, PDF_THUMBNAIL_HEIGHT, TOOLBAR_ICON_SIZE,
+    ICON_MOVE_UP, ICON_MOVE_DOWN, ICON_EXCLUDE, ICON_UNDO, ICON_REDO,
+    ICON_SAVE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +183,7 @@ class PDFEditorView(QWidget):
         self._thread_pool.setMaxThreadCount(2)
         self._last_total = 0
         self._last_path = None
+        self._tool_icons = {}
         self._setup_ui()
         self._connect_signals()
 
@@ -196,33 +202,28 @@ class PDFEditorView(QWidget):
         )
         self._toolbar = toolbar
 
-        self._move_up_btn = QPushButton("\u25B2 Mover Arriba")
-        self._move_up_btn.setProperty("flat", True)
+        self._move_up_btn = self._create_tool_button("Mover Arriba", ICON_MOVE_UP)
         self._move_up_btn.clicked.connect(self._on_move_up)
         toolbar.addWidget(self._move_up_btn)
 
-        self._move_down_btn = QPushButton("\u25BC Mover Abajo")
-        self._move_down_btn.setProperty("flat", True)
+        self._move_down_btn = self._create_tool_button("Mover Abajo", ICON_MOVE_DOWN)
         self._move_down_btn.clicked.connect(self._on_move_down)
         toolbar.addWidget(self._move_down_btn)
 
         toolbar.addSeparator()
 
-        self._toggle_btn = QPushButton("\u25A1 Excluir/Incluir")
-        self._toggle_btn.setProperty("flat", True)
+        self._toggle_btn = self._create_tool_button("Excluir/Incluir", ICON_EXCLUDE)
         self._toggle_btn.clicked.connect(self._on_toggle)
         toolbar.addWidget(self._toggle_btn)
 
         toolbar.addSeparator()
 
-        self._undo_btn = QPushButton("\u21B6 Deshacer")
-        self._undo_btn.setProperty("flat", True)
+        self._undo_btn = self._create_tool_button("Deshacer", ICON_UNDO)
         self._undo_btn.setEnabled(False)
         self._undo_btn.clicked.connect(self._vm.undo)
         toolbar.addWidget(self._undo_btn)
 
-        self._redo_btn = QPushButton("\u21B7 Rehacer")
-        self._redo_btn.setProperty("flat", True)
+        self._redo_btn = self._create_tool_button("Rehacer", ICON_REDO)
         self._redo_btn.setEnabled(False)
         self._redo_btn.clicked.connect(self._vm.redo)
         toolbar.addWidget(self._redo_btn)
@@ -231,7 +232,7 @@ class PDFEditorView(QWidget):
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
 
-        self._save_btn = QPushButton("\u2B07 Guardar Config")
+        self._save_btn = self._create_tool_button(" Guardar Config", ICON_SAVE)
         self._save_btn.clicked.connect(self._vm.save_config)
         toolbar.addWidget(self._save_btn)
 
@@ -250,6 +251,15 @@ class PDFEditorView(QWidget):
         self._grid_layout.setContentsMargins(12, 12, 12, 12)
         scroll.setWidget(self._grid_widget)
         layout.addWidget(scroll)
+
+    def _create_tool_button(self, text: str, icon_path: str) -> QPushButton:
+        """Crea un botón plano del toolbar con ícono escalado."""
+        btn = QPushButton(text)
+        btn.setProperty("flat", True)
+        btn.setIcon(theme_icon(icon_path, False))
+        btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
+        self._tool_icons[btn] = icon_path
+        return btn
 
     def _connect_signals(self):
         self._vm.pages_updated.connect(self._refresh_grid)
@@ -379,6 +389,8 @@ class PDFEditorView(QWidget):
     def apply_theme(self, dark: bool):
         """Reaplica el tema al toolbar y a los thumbnails."""
         self._palette = get_palette(dark)
+        for btn, icon_path in self._tool_icons.items():
+            btn.setIcon(theme_icon(icon_path, dark))
         self._toolbar.setStyleSheet(
             f"background-color: {self._palette['surface_container']}; "
             f"border-bottom: 1px solid {self._palette['outline_variant']}; "

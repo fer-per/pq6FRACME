@@ -10,6 +10,8 @@ from PySide6.QtGui import QIcon
 
 from src.presentation.theme.fonts import get_font
 from src.presentation.theme.colors import get_palette
+from src.presentation.theme.icons import tinted_pixmap
+from src.presentation.constants import ICON_SEARCH
 
 
 class SearchBar(QWidget):
@@ -39,9 +41,13 @@ class SearchBar(QWidget):
 
         # Campo de búsqueda
         self._input = QLineEdit()
-        self._input.setPlaceholderText(f"🔍 {placeholder}")
+        self._input.setPlaceholderText(placeholder)
         self._input.setFont(get_font("body"))
         self._input.setFixedHeight(32)
+        self._search_action = self._input.addAction(
+            QIcon(), QLineEdit.ActionPosition.LeadingPosition
+        )
+        self._set_search_icon(False)
         self._input.textChanged.connect(self._on_text_changed)
         layout.addWidget(self._input)
 
@@ -53,6 +59,20 @@ class SearchBar(QWidget):
         self._clear_btn.clicked.connect(self._clear)
         self._clear_btn.setVisible(False)
         layout.addWidget(self._clear_btn)
+
+    def _set_search_icon(self, dark: bool):
+        """Aplica la lupa recolorizada según el tema."""
+        pix = tinted_pixmap(ICON_SEARCH, dark).scaled(
+            16, 16,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self._search_action.setIcon(QIcon(pix))
+
+    def apply_theme(self, dark: bool):
+        """Reaplica el ícono de búsqueda según el tema."""
+        self._palette = get_palette(dark)
+        self._set_search_icon(dark)
 
     def _on_text_changed(self, text: str):
         """Reinicia el timer de debounce."""

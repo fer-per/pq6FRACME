@@ -12,12 +12,16 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSpinBox, QScrollArea, QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal, QObject, QRunnable, QThreadPool, Slot
+from PySide6.QtCore import Qt, QSize, Signal, QObject, QRunnable, QThreadPool, Slot
 from PySide6.QtGui import QPixmap, QImage
 
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
-from src.presentation.constants import MODULE_ICONS
+from src.presentation.theme.icons import theme_icon
+from src.presentation.constants import (
+    MODULE_ICONS, TOOLBAR_ICON_SIZE,
+    ICON_PREV_PAGE, ICON_NEXT_PAGE, ICON_ZOOM_OUT, ICON_ZOOM_IN,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +86,7 @@ class PDFPreview(QWidget):
 
         self._thread_pool = QThreadPool(self)
         self._thread_pool.setMaxThreadCount(3)
+        self._nav_icons = {}
         self._setup_ui()
 
     # ─── UI ────────────────────────────────────────────────
@@ -142,12 +147,8 @@ class PDFPreview(QWidget):
 
         btn_style = self._build_btn_style()
         self._nav_buttons = []
-        self._prev_btn = QPushButton("\u25C0")
-        self._prev_btn.setFixedSize(32, 28)
-        self._prev_btn.setStyleSheet(btn_style)
-        self._prev_btn.setToolTip("Página anterior")
+        self._prev_btn = self._create_nav_button(ICON_PREV_PAGE, "Página anterior", (32, 28))
         self._prev_btn.clicked.connect(self._prev_page)
-        self._nav_buttons.append(self._prev_btn)
         nav_layout.addWidget(self._prev_btn)
 
         self._page_spin = QSpinBox()
@@ -164,12 +165,8 @@ class PDFPreview(QWidget):
         self._total_label.setStyleSheet(f"color: {self._palette['text_secondary']}; background: transparent;")
         nav_layout.addWidget(self._total_label)
 
-        self._next_btn = QPushButton("\u25B6")
-        self._next_btn.setFixedSize(32, 28)
-        self._next_btn.setStyleSheet(btn_style)
-        self._next_btn.setToolTip("Página siguiente")
+        self._next_btn = self._create_nav_button(ICON_NEXT_PAGE, "Página siguiente", (32, 28))
         self._next_btn.clicked.connect(self._next_page)
-        self._nav_buttons.append(self._next_btn)
         nav_layout.addWidget(self._next_btn)
 
         nav_layout.addStretch()
@@ -180,11 +177,8 @@ class PDFPreview(QWidget):
         self._zoom_label = zoom_label
         nav_layout.addWidget(zoom_label)
 
-        self._zoom_out_btn = QPushButton("\u2212")
-        self._zoom_out_btn.setFixedSize(28, 28)
-        self._zoom_out_btn.setStyleSheet(btn_style)
+        self._zoom_out_btn = self._create_nav_button(ICON_ZOOM_OUT, "Alejar", (25, 25), icon_size=9)
         self._zoom_out_btn.clicked.connect(lambda: self._adjust_zoom(-25))
-        self._nav_buttons.append(self._zoom_out_btn)
         nav_layout.addWidget(self._zoom_out_btn)
 
         self._zoom_spin = QSpinBox()
@@ -198,11 +192,8 @@ class PDFPreview(QWidget):
         self._zoom_spin.valueChanged.connect(self._on_zoom_changed)
         nav_layout.addWidget(self._zoom_spin)
 
-        self._zoom_in_btn = QPushButton("+")
-        self._zoom_in_btn.setFixedSize(28, 28)
-        self._zoom_in_btn.setStyleSheet(btn_style)
+        self._zoom_in_btn = self._create_nav_button(ICON_ZOOM_IN, "Acercar", (28, 28), icon_size=14)
         self._zoom_in_btn.clicked.connect(lambda: self._adjust_zoom(25))
-        self._nav_buttons.append(self._zoom_in_btn)
         nav_layout.addWidget(self._zoom_in_btn)
 
         layout.addWidget(nav_bar)
@@ -245,6 +236,20 @@ class PDFPreview(QWidget):
             }}
         """
 
+    def _create_nav_button(self, icon_path: str, tooltip: str,
+                           size: tuple[int, int],
+                           icon_size: int = TOOLBAR_ICON_SIZE) -> QPushButton:
+        """Crea un botón de navegación/zoom con ícono."""
+        btn = QPushButton()
+        btn.setFixedSize(*size)
+        btn.setIcon(theme_icon(icon_path, False))
+        btn.setIconSize(QSize(icon_size, icon_size))
+        btn.setStyleSheet(self._build_btn_style())
+        btn.setToolTip(tooltip)
+        self._nav_icons[btn] = icon_path
+        self._nav_buttons.append(btn)
+        return btn
+
     def apply_theme(self, dark: bool):
         """Reaplica los estilos dependientes del tema."""
         self._palette = get_palette(dark)
@@ -267,6 +272,8 @@ class PDFPreview(QWidget):
         btn_style = self._build_btn_style()
         for btn in self._nav_buttons:
             btn.setStyleSheet(btn_style)
+        for btn, icon_path in self._nav_icons.items():
+            btn.setIcon(theme_icon(icon_path, dark))
 
         label_style = f"color: {self._palette['text_secondary']}; background: transparent;"
         self._total_label.setStyleSheet(label_style)
