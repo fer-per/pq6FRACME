@@ -222,6 +222,44 @@ class TestCronicaAnalyzer:
         assert "mes" in result.advertencias[0].descripcion
         assert len(result.errores) == 0
 
+    def test_mes_fuera_de_rango(self):
+        records = [_rec(fecha_inicio="6/19/1586")]
+        result = analizar_cronica(records)
+        assert len(result.errores) == 1
+        assert result.errores[0].tipo == "CRONICA"
+        assert "MES FUERA DE RANGO" in result.errores[0].descripcion
+        assert result.errores[0].fatal is True
+
+    def test_mes_fuera_de_rango_ignora_fecha_fin(self):
+        records = [_rec(fecha_inicio="19/2/1586", fecha_fin="6/19/1586")]
+        result = analizar_cronica(records)
+        assert len(result.errores) == 0
+
+    def test_mes_invalido_no_avanza_a_otras_detecciones(self):
+        records = [
+            _rec(id="#0001", fecha_inicio="6/19/1586"),
+            _rec(id="#0002", fila=11, fecha_inicio="20/06/1891"),
+        ]
+        result = analizar_cronica(records)
+        assert len(result.errores) == 1
+        assert result.errores[0].fatal is True
+
+    def test_solo_se_considera_fecha_inicio(self):
+        records = [_rec(fecha_inicio="", fecha_fin="20/06/1891")]
+        result = analizar_cronica(records)
+        assert len(result.advertencias) == 1
+        assert "No se pudo extraer el año" in result.advertencias[0].descripcion
+        assert len(result.errores) == 0
+
+    def test_sin_fecha_inicio_ni_fin_advierte(self):
+        records = [
+            _rec(id="#0001", fecha_inicio="15/03/1891"),
+            _rec(id="#0002", fila=11, fecha_inicio="", fecha_fin=""),
+        ]
+        result = analizar_cronica(records)
+        assert len(result.advertencias) == 1
+        assert len(result.errores) == 0
+
 
 # ═══════════════════════════════════════════════════════════════
 # COVERAGE ANALYZER

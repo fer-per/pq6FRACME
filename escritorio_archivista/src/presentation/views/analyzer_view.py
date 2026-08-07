@@ -293,7 +293,29 @@ class AnalyzerErrorTab(QWidget):
             row["_error_fields"] = error_fields
             rows.append(row)
 
+        # Errores sin registro asociado (p. ej. cobertura global del PDF)
+        # se muestran como filas sintéticas para que sean visibles y
+        # aparezcan al filtrar "Solo Líneas con Error".
+        record_ids = {record.id for record in records}
+        for error in errors:
+            if error.record_id not in record_ids:
+                rows.append(self._build_error_row(error))
+
         return rows
+
+    def _build_error_row(self, error) -> dict:
+        """Construye una fila sintética para un error sin registro asociado."""
+        row = {"_record": None, "_errors": [error], "_error_fields": set()}
+        for _, field in self._columns:
+            row.setdefault(field, "")
+        row["fila"] = error.fila
+        row["registro"] = error.record_id
+        row["tipo"] = error.tipo
+        row["descripcion"] = error.descripcion
+        row["valor_actual"] = error.valor_actual
+        row["valor_esperado"] = error.valor_esperado
+        row["num_hojas"] = self._count_sheets(row.get("pg_pdf", ""))
+        return row
 
     @staticmethod
     def _count_sheets(pg_pdf: str) -> str:
@@ -472,7 +494,8 @@ class AnalyzerView(QWidget):
         record = data.get("_record") if isinstance(data, dict) else data
 
         # Permite editar la fila: campo del analizador y/o paginación PDF.
-        self._correct_btn.setEnabled(True)
+        # Las filas sintéticas (errores globales) no tienen registro editable.
+        self._correct_btn.setEnabled(record is not None)
 
         # Estado del botón validar según el registro seleccionado
         rid = record.id if record is not None else None

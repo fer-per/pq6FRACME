@@ -15,6 +15,7 @@ from src.domain.entities import (
     SugerenciaCorreccion,
     SystemLog,
 )
+from src.domain.services.folio_mapper import mapper_from_config
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +291,39 @@ class AppStateVM(QObject):
         self._logs.clear()
         self.logs_changed.emit()
 
+    def recalcular_pg_pdf(self):
+        """Recalcula el ``pg_pdf`` de todos los registros con la configuración actual.
+
+        Mantiene el mismo comportamiento que ``AnalizarDatosUseCase``: respeta
+        ``pg_pdf_manual`` (fuerza el rango literal) y ``comparte_hoja`` (el
+        registro arranca en la última hoja del registro anterior). Así la
+        grilla muestra siempre el mapeo vigente y coincide con el analizador
+        de cobertura, sin quedar datos viejos guardados en la sesión.
+        """
+        if not self._records:
+            return
+        mapper = mapper_from_config(
+            pag_pdf_inicio=self._pag_pdf_inicio,
+            segmentos=self._segmentos,
+            exclusiones=self._exclusions,
+            page_map=self._page_map,
+            active_pages=self._active_pages,
+            total_pdf_pages=self._pdf_total_pages,
+        )
+        mapper.start_sequence()
+        for record in self._records:
+            if record.pg_pdf_manual.strip():
+                pages = mapper.folio_str_to_pdf_pages(
+                    record.folios, override=record.pg_pdf_manual
+                )
+                record.pg_pdf = record.pg_pdf_manual.strip() if pages else ""
+            else:
+                pdf_range = mapper.folio_str_to_pdf_range(
+                    record.folios, share_last=record.comparte_hoja
+                )
+                record.pg_pdf = pdf_range or ""
+
+
     def to_dict(self) -> dict:
         """Serializa el estado completo para guardado de sesión."""
         return {
@@ -333,6 +367,11 @@ class AppStateVM(QObject):
         self._records = data.get("records", [])
         self._exclusions = data.get("exclusions", [])
         self._suggestions = data.get("suggestions", [])
+
+        # Recalcular pg_pdf con la configuración de la sesión para que la
+        # grilla nunca muestre valores viejos guardados y siempre coincida
+        # con el analizador de cobertura.
+        self.recalcular_pg_pdf()
 
         # Emitir todas las señales
         self.records_changed.emit()

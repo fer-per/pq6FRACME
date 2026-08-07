@@ -2,6 +2,7 @@
 Analizador de data crónica — valida la secuencia cronológica de los registros.
 
 Detecta:
+0. Mes fuera de rango (fatal)
 1. Año no extraíble (warning)
 2. Año fuera de rango histórico [1500-2100] (fatal)
 3. Regresión cronológica: año actual < año anterior (fatal)
@@ -9,6 +10,9 @@ Detecta:
 
 La sucesión se valida por MES y no por día, ya que en los protocolos
 históricos el día exacto no siempre es fiable ni relevante.
+
+El analizador usa únicamente ``fecha_inicio``; ``fecha_fin`` no se
+considera en las validaciones.
 """
 import logging
 import re
@@ -39,6 +43,12 @@ def analizar_cronica(records: List[InventoryRecord]) -> AnalysisResult:
     anio_max: Optional[int] = None
 
     for record in records:
+        # 0. Verificar rango de mes antes de procesar
+        mes_error = _verificar_rango_mes(record)
+        if mes_error is not None:
+            errores.append(mes_error)
+            continue
+
         anio = _extraer_anio(record.fecha_inicio)
 
         # Fallback: intentar desde campo registro
@@ -126,6 +136,52 @@ def analizar_cronica(records: List[InventoryRecord]) -> AnalysisResult:
             "anio_max": anio_max,
         },
     )
+
+
+def _verificar_rango_mes(record: InventoryRecord) -> Optional[AnalysisError]:
+    """
+    Verifica que el mes de ``fecha_inicio`` esté dentro del rango 1-12.
+
+    Fechas con mes inválido (ej: "6/19/1586" interpretado como mes 19)
+    son datos corruptos o en formato ambiguo, y harían que el registro
+    caiga en la carpeta "SIN FECHA". Se reportan como error fatal.
+    """
+    campo = record.fecha_inicio
+    if not campo:
+        return None
+    mes = _extraer_mes_bruto(campo)
+    if mes is not None and not (1 <= mes <= 12):
+        return AnalysisError(
+            record_id=record.id,
+            fila=record.fila,
+            tipo="CRONICA",
+            descripcion=(
+                f"MES FUERA DE RANGO: la fecha '{campo}' tiene el mes "
+                f"{mes}, pero el mes debe estar entre 1 y 12 (posible "
+                "fecha en formato m/d/y ingresada como d/m/y)."
+            ),
+            valor_actual=str(mes),
+            valor_esperado="1-12",
+            fatal=True,
+        )
+    return None
+
+
+def _extraer_mes_bruto(texto: str) -> Optional[int]:
+    """
+    Extrae el segundo campo numérico de una fecha d/m/yyyy (el mes).
+
+    A diferencia de ``_extraer_mes`` (que solo devuelve None si el formato
+    no es parseable), este devuelve el valor crudo aunque esté fuera de
+    rango, para poder detectarlo como error.
+    """
+    if not texto or not isinstance(texto, str):
+        return None
+    texto = texto.strip()
+    match = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', texto)
+    if match:
+        return int(match.group(2))
+    return None
 
 
 def _extraer_anio(texto: str) -> Optional[int]:

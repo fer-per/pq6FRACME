@@ -69,13 +69,6 @@ ANNOTATION_KEYWORDS = [
 EMPTY_VALUES = {"nan", "nat", "none", ""}
 
 # ─── Clasificación de títulos para jerarquía ────────────────
-TITLE_CLASSIFICATION = {
-    "compraventa": "COMPRAVENTA",
-    "testamento": "TESTAMENTO",
-    "poder": "PODER_NOTARIAL",
-    "arrendamiento": "ARRENDAMIENTO",
-    "hipoteca": "HIPOTECA",
-}
 TITLE_DEFAULT = "ESCRITURA_VARIAS"
 
 # ─── Meses para jerarquía ───────────────────────────────────

@@ -157,6 +157,28 @@ class TestMapperFromConfig:
         max_p = mapper.max_pdf_page(records)
         assert max_p == 10  # 5v = folio int 10
 
+    def test_max_pdf_page_respeta_pg_pdf_manual(self):
+        """max_pdf_page debe respetar el rango manual de paginación."""
+        mapper = mapper_from_config(pag_pdf_inicio=1)
+        r1 = _make_record("001r-002v", "#0001")
+        r2 = _make_record("003r", "#0002")
+        r2.pg_pdf_manual = "7"
+        r3 = _make_record("004r", "#0003")
+        # Sin respetar el manual: r2→5, r3→6 (max 6).
+        # Respetándolo: r2→7 (contador a 8), r3→8 (max 8).
+        assert mapper.max_pdf_page([r1, r2, r3]) == 8
+
+    def test_max_pdf_page_respeta_comparte_hoja(self):
+        """max_pdf_page debe respetar comparte_hoja (arranca en la hoja anterior)."""
+        mapper = mapper_from_config(pag_pdf_inicio=1)
+        r1 = _make_record("001r-002v", "#0001")
+        r2 = _make_record("003r", "#0002")
+        r2.comparte_hoja = True
+        r3 = _make_record("004r", "#0003")
+        # Sin compartir: r2→5, r3→6 (max 6).
+        # Compartiendo: r2→4 (misma hoja que el final de r1), r3→5 (max 5).
+        assert mapper.max_pdf_page([r1, r2, r3]) == 5
+
     def test_paginas_descartadas_no_cuentan(self):
         """Una página descartada en el editor PDF se salta y no cuenta."""
         # PDF físico 1..4 donde la 2 es duplicada; el usuario la descarta

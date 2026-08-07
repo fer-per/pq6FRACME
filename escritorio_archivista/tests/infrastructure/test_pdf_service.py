@@ -134,6 +134,60 @@ class TestFragmentarPDFUseCase:
         pdf_service.extraer_paginas.assert_called_once_with(lector, [1, 2, 3, 4], dest)
         assert records[0].estado == "FRAGMENTADO"
 
+    def test_revisar_avanza_contador_y_no_desplaza_registros_siguientes(self):
+        """Un registro REVISAR se omite pero conserva el mapeo de los demás."""
+        pdf_service = MagicMock()
+        hierarchy = MagicMock()
+        uc = FragmentarPDFUseCase(pdf_service, hierarchy)
+
+        tmp_dir = tempfile.mkdtemp()
+        dest = os.path.join(tmp_dir, "out", "registro.pdf")
+        hierarchy.construir_ruta.side_effect = lambda r, o, a: os.path.join(
+            tmp_dir, "out", f"{r.id}.pdf"
+        )
+
+        # Folios "001r-002v" → páginas 1-4; "003r-004v" → 5-8; "005r" → 9
+        records = [
+            InventoryRecord(
+                id="#0001", fila=10, registro="001", escribano="García",
+                protocolo="1", folios="001r-002v", pg_pdf="1-4",
+                titulo="A", estado="FRAGMENTADO",
+            ),
+            InventoryRecord(
+                id="#0002", fila=11, registro="002", escribano="García",
+                protocolo="1", folios="003r-004v", pg_pdf="5-8",
+                titulo="B", estado="REVISAR",
+            ),
+            InventoryRecord(
+                id="#0003", fila=12, registro="003", escribano="García",
+                protocolo="1", folios="005r", pg_pdf="9",
+                titulo="C", estado="",
+            ),
+        ]
+
+        result = uc.ejecutar(
+            records=records,
+            pdf_path="maestro.pdf",
+            output_dir=tmp_dir,
+            acervo_num="7",
+            pag_pdf_inicio=1,
+        )
+
+        assert result.total_exitos == 2
+        assert result.total_fallos == 0
+
+        # El REVISAR no se extrae
+        for args in pdf_service.extraer_paginas.call_args_list:
+            pages = args[0][1]
+            assert pages != [5, 6, 7, 8]
+
+        # El tercer registro conserva su mapeo real (9), no el desplazado (5)
+        extraido_c = [
+            args[0][1] for args in pdf_service.extraer_paginas.call_args_list
+            if args[0][2].endswith("#0003.pdf")
+        ]
+        assert extraido_c == [[9]]
+
     def test_cierra_lector_aun_con_error_en_extraccion(self):
         pdf_service = MagicMock()
         hierarchy = MagicMock()

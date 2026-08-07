@@ -197,11 +197,26 @@ class FolioMapper:
         return f"{pages[0]}-{pages[-1]}"
 
     def max_pdf_page(self, records: list) -> int:
-        """Calcula la página PDF máxima requerida."""
+        """Calcula la página PDF máxima requerida.
+
+        Respeta ``pg_pdf_manual`` (rango literal) y ``comparte_hoja``
+        (arranca en la última hoja del registro anterior), igual que el
+        cálculo de ``pg_pdf`` por registro, para que la cobertura siempre
+        coincida con el mapeo mostrado en la grilla.
+        """
         self.start_sequence()
         max_p = 0
         for r in records:
-            pages = self.folio_str_to_pdf_pages(r.folios)
+            manual = getattr(r, "pg_pdf_manual", "") or ""
+            share_last = bool(getattr(r, "comparte_hoja", False))
+            if manual.strip():
+                pages = self.folio_str_to_pdf_pages(
+                    r.folios, override=manual
+                )
+            else:
+                pages = self.folio_str_to_pdf_pages(
+                    r.folios, share_last=share_last
+                )
             if pages:
                 max_p = max(max_p, pages[-1])
         return max_p

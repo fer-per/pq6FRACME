@@ -93,6 +93,17 @@ class FragmentarPDFUseCase:
                         "Motivo": "Estado REVISAR — errores sin corregir",
                     })
                     logger.warning("Omitido %s: estado REVISAR.", record.id)
+                    # Avanzar el contador del mapper para que los registros
+                    # siguientes conserven su mapeo folio → página (la grilla
+                    # recorre TODOS los registros en orden).
+                    if record.pg_pdf_manual.strip():
+                        mapper.folio_str_to_pdf_pages(
+                            record.folios, override=record.pg_pdf_manual
+                        )
+                    else:
+                        mapper.folio_str_to_pdf_pages(
+                            record.folios, share_last=record.comparte_hoja
+                        )
                     continue
 
                 # Calcular páginas (respetando comparte_hoja o rango manual)

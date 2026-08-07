@@ -71,7 +71,17 @@ def generar_sugerencias(
                         for r in records_list:
                             if r.id == record.id:
                                 break
-                            mapper.folio_str_to_pdf_pages(r.folios)
+                            if (getattr(r, "pg_pdf_manual", "") or "").strip():
+                                mapper.folio_str_to_pdf_pages(
+                                    r.folios, override=r.pg_pdf_manual
+                                )
+                            else:
+                                mapper.folio_str_to_pdf_pages(
+                                    r.folios,
+                                    share_last=bool(
+                                        getattr(r, "comparte_hoja", False)
+                                    ),
+                                )
                         pdf_range = mapper.folio_str_to_pdf_range(rango_sugerido)
                         paginas_sugeridas = pdf_range or ""
 

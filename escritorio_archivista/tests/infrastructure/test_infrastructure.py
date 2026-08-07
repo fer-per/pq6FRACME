@@ -130,25 +130,74 @@ class TestHierarchyBuilder:
         assert "1891" in ruta
         assert "PROTOCOLO 3" in ruta
         assert "REGISTRO 001" in ruta
-        assert "COMPRAVENTA" in ruta
+        assert "Compraventa de finca" in ruta
         assert "3. MARZO" in ruta
         assert "Juan Pérez" in ruta
         assert "María López.pdf" in ruta
 
-    def test_clasificacion_titulo_testamento(self):
+    def test_interesados_truncan_en_primera_coma(self):
+        """La carpeta del interesado 1 y el PDF solo usan el nombre previo a la coma."""
+        record = InventoryRecord(
+            id="#0204", fila=50, registro="006", escribano="Aguilar",
+            protocolo="16", folios="281r-281v", pg_pdf="440-441",
+            titulo="PODER", fecha_inicio="14/5/1586",
+            interesado1="Luis de Rueda, Juan de Mendoza",
+            interesado2="Don Melchor de Avalos del Castillo, Otro Más",
+            data_topica="AREQUIPA",
+        )
+        ruta = self.builder.construir_ruta(record, "/output", "7")
+
+        assert "Luis de Rueda" in ruta
+        assert "Juan de Mendoza" not in ruta
+        assert "," not in ruta
+        assert "Don Melchor de Avalos del Castillo.pdf" in ruta
+        assert "Otro Más" not in ruta
+
+    def test_interesado_sin_coma_se_mantiene(self):
+        record = InventoryRecord(
+            id="#0411", fila=60, registro="012", escribano="Aguilar",
+            protocolo="16", folios="513v-514r", pg_pdf="901-902",
+            titulo="OBLIGACIÓN", fecha_inicio="6/9/1586",
+            interesado1="Juan de Salazar", interesado2="Juan Mejía",
+            data_topica="AREQUIPA",
+        )
+        ruta = self.builder.construir_ruta(record, "/output", "7")
+
+        assert "Juan de Salazar" in ruta
+        assert "Juan Mejía.pdf" in ruta
+
+    def test_primer_interesado_vacio_no_rompe(self):
+        assert HierarchyBuilder._primer_interesado("") == ""
+        assert HierarchyBuilder._primer_interesado("Nombre único") == "Nombre único"
+        assert HierarchyBuilder._primer_interesado("A, B, C") == "A"
+        assert HierarchyBuilder._primer_interesado("  A , B  ") == "A"
+
+
+    def test_titulo_usa_valor_literal_de_la_columna(self):
+        """La carpeta del título usa el texto exacto de la columna 'titulo'."""
         record = InventoryRecord(
             id="#0002", fila=11, registro="002", escribano="López",
             protocolo="1", folios="003r", pg_pdf="5",
             titulo="Testamento abierto", fecha_inicio="01/06/1891",
         )
         ruta = self.builder.construir_ruta(record, "/output", "7")
-        assert "TESTAMENTO" in ruta
+        assert "Testamento abierto" in ruta
+        assert "TESTAMENTO" not in ruta
 
-    def test_clasificacion_titulo_default(self):
+    def test_titulo_vacio_usa_default(self):
         record = InventoryRecord(
             id="#0003", fila=12, registro="003", escribano="López",
             protocolo="1", folios="004r", pg_pdf="7",
             titulo="Documento especial", fecha_inicio="01/06/1891",
+        )
+        ruta = self.builder.construir_ruta(record, "/output", "7")
+        assert "Documento especial" in ruta
+
+    def test_titulo_vacio_cae_al_default(self):
+        record = InventoryRecord(
+            id="#0003", fila=12, registro="003", escribano="López",
+            protocolo="1", folios="004r", pg_pdf="7",
+            titulo="", fecha_inicio="01/06/1891",
         )
         ruta = self.builder.construir_ruta(record, "/output", "7")
         assert "ESCRITURA_VARIAS" in ruta
@@ -208,14 +257,112 @@ class TestHierarchyBuilder:
     def test_sanitize_vacio(self):
         assert HierarchyBuilder._sanitize("") == "SIN_NOMBRE"
 
-    def test_fallback_sin_fecha(self):
+    def test_sin_fecha_usa_solo_carpeta_sin_fecha(self):
+        """Sin fecha solo se crea la carpeta 'SIN FECHA' en la raíz."""
         record = InventoryRecord(
             id="#0004", fila=13, registro="004", escribano="Test",
             protocolo="1", folios="005r", pg_pdf="9", titulo="Test",
         )
         ruta = self.builder.construir_ruta(record, "/output", "7")
-        # Debe usar el default (1891)
-        assert "1891" in ruta
+        assert ruta.endswith(
+            os.path.join("SIN FECHA", "Interesado_A_0004", "0004.pdf")
+        )
+        assert "ACERVO" not in ruta
+        assert "FONDO DOCUMENTAL" not in ruta
+        assert "SIGLO" not in ruta
+        assert "Test" not in ruta.split(os.sep)[0]
+
+    def test_sin_fecha_pero_con_interesados_usa_nombre_pdf(self):
+        """Sin fecha, se conservan las carpetas de interesados y el nombre PDF."""
+        record = InventoryRecord(
+            id="#0009", fila=18, registro="009", escribano="Test",
+            protocolo="1", folios="010r", pg_pdf="19", titulo="Test",
+            interesado1="Juan Pérez", interesado2="María López",
+        )
+        ruta = self.builder.construir_ruta(record, "/output", "7")
+        assert ruta.endswith(
+            os.path.join(
+                "SIN FECHA", "Juan Pérez", "María López.pdf",
+            )
+        )
+
+    def test_sin_fecha_fin_usa_fecha_fin(self):
+        """Si fecha_inicio está vacía, se usa fecha_fin."""
+        record = InventoryRecord(
+            id="#0010", fila=19, registro="010", escribano="Test",
+            protocolo="1", folios="011r", pg_pdf="21", titulo="Test",
+            fecha_fin="20/06/1568",
+        )
+        ruta = self.builder.construir_ruta(record, "/output", "7")
+        assert "1568" in ruta
+        assert "6. JUNIO" in ruta
+
+    def test_fecha_invalida_usa_solo_carpeta_sin_fecha(self):
+        """Fecha con mes fuera de rango no es una fecha válida."""
+        record = InventoryRecord(
+            id="#0011", fila=20, registro="011", escribano="Test",
+            protocolo="1", folios="012r", pg_pdf="23", titulo="Test",
+            fecha_inicio="15/15/1891",
+        )
+        ruta = self.builder.construir_ruta(record, "/output", "7")
+        assert "SIGLO" not in ruta
+        assert "ACERVO" not in ruta
+        assert "SIN FECHA" in ruta
+        assert ruta.endswith("0011.pdf")
+
+    def test_numeracion_sucesiva_pdf_repetido(self, tmp_path):
+        """PDFs con el mismo nombre en la misma carpeta se numeran por orden."""
+        base = {
+            "escribano": "García", "protocolo": "1",
+            "folios": "001r", "pg_pdf": "1",
+            "titulo": "Compraventa", "fecha_inicio": "15/03/1891",
+            "interesado1": "Juan Pérez", "interesado2": "María López",
+        }
+        r1 = InventoryRecord(id="#0001", fila=19, registro="1", **base)
+        r2 = InventoryRecord(id="#0002", fila=20, registro="1", **base)
+        r3 = InventoryRecord(id="#0003", fila=21, registro="1", **base)
+
+        p1 = self.builder.construir_ruta(r1, str(tmp_path), "7")
+        os.makedirs(os.path.dirname(p1), exist_ok=True)
+        with open(p1, 'w') as f:
+            f.write("x")
+
+        p2 = self.builder.construir_ruta(r2, str(tmp_path), "7")
+        os.makedirs(os.path.dirname(p2), exist_ok=True)
+        with open(p2, 'w') as f:
+            f.write("x")
+
+        p3 = self.builder.construir_ruta(r3, str(tmp_path), "7")
+
+        assert p1.endswith("María López.pdf")
+        assert p2.endswith("María López_2.pdf")
+        assert p3.endswith("María López_3.pdf")
+
+    def test_numeracion_sucesiva_sin_fecha(self, tmp_path):
+        """La numeración sucesiva también aplica en la carpeta del escribano."""
+        base = {
+            "escribano": "DIEGO DE AGUILAR",
+            "interesado1": "Juan Pérez", "interesado2": "María López",
+        }
+        r1 = InventoryRecord(
+            id="#0001", fila=19, registro="", protocolo="1",
+            folios="001r", pg_pdf="1", titulo="Test", **base,
+        )
+        r2 = InventoryRecord(
+            id="#0002", fila=20, registro="", protocolo="1",
+            folios="002r", pg_pdf="2", titulo="Test", **base,
+        )
+
+        p1 = self.builder.construir_ruta(r1, str(tmp_path), "7")
+        os.makedirs(os.path.dirname(p1), exist_ok=True)
+        with open(p1, 'w') as f:
+            f.write("x")
+
+        p2 = self.builder.construir_ruta(r2, str(tmp_path), "7")
+
+        assert p1.endswith("María López.pdf")
+        assert p2.endswith("María López_2.pdf")
+        assert os.path.dirname(p1) == os.path.dirname(p2)
 
     def test_formato_fecha_yyyy_mm_dd(self):
         record = InventoryRecord(
