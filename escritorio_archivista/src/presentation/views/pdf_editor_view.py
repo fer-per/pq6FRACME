@@ -117,10 +117,14 @@ class ThumbnailWidget(QWidget):
 
     def set_active(self, active: bool):
         self._active = active
-        self._status_label.setText("\u2713 Activa" if active else "\u2717 Excluida")
+        self._status_label.setText("\u2713" if active else "\u2717")
         color = self._palette['success'] if active else self._palette['error']
         self._status_label.setStyleSheet(f"color: {color}; background: transparent;")
         self._update_style()
+
+    def set_number(self, n: int):
+        """Renumera la hoja mostrada según su posición en la secuencia (1-based)."""
+        self._page_label.setText(f"Pág {n}")
 
     def set_selected(self, selected: bool):
         self._selected = selected
@@ -129,11 +133,6 @@ class ThumbnailWidget(QWidget):
     def apply_theme(self, dark: bool):
         """Reaplica los colores del thumbnail al cambiar el tema."""
         self._palette = get_palette(dark)
-        self._image_label.setStyleSheet(
-            f"background-color: {self._palette['surface_high']}; "
-            f"border: 1px solid {self._palette['outline_variant']}; "
-            f"border-radius: 4px;"
-        )
         self._page_label.setStyleSheet(
             f"color: {self._palette['text_primary']}; background: transparent;"
         )
@@ -144,17 +143,27 @@ class ThumbnailWidget(QWidget):
         self._update_style()
 
     def _update_style(self):
+        """Aplica borde y fondo del widget y de la lámina según el estado."""
         if self._selected:
-            border = f"2px solid {self._palette['primary']}"
+            border_widget = f"2px solid {self._palette['primary']}"
         elif not self._active:
-            border = f"1px solid {self._palette['error']}"
+            border_widget = f"1px solid {self._palette['error']}"
         else:
-            border = f"1px solid {self._palette['outline_variant']}"
+            border_widget = f"1px solid {self._palette['outline_variant']}"
+        border_img = (
+            f"2px solid {self._palette['primary']}"
+            if self._selected else
+            f"1px solid {self._palette['outline_variant']}"
+        )
 
         bg = self._palette['selected_bg'] if self._selected else self._palette['surface']
         self.setStyleSheet(
             f"ThumbnailWidget {{ background-color: {bg}; "
-            f"border: {border}; border-radius: 6px; }}"
+            f"border: {border_widget}; border-radius: 6px; }}"
+        )
+        self._image_label.setStyleSheet(
+            f"background-color: {self._palette['surface_high']}; "
+            f"border: {border_img}; border-radius: 4px;"
         )
 
     def mousePressEvent(self, event):
@@ -285,17 +294,20 @@ class PDFEditorView(QWidget):
         self._pending.clear()
         self._rendered.clear()
         self._thumb_tops.clear()
+        self._sync_preview()
 
-        active_pages = self._vm.get_active_pages()
+        active = self._vm.get_active_pages()
+        active_set = set(active)
         total = self._state.pdf_total_pages
+        excluded = [p for p in range(1, total + 1) if p not in active_set]
+        ordered = list(active) + excluded
         cols = 4
         thumb_w = PDF_THUMBNAIL_WIDTH + 10
         thumb_h = PDF_THUMBNAIL_HEIGHT + 30
         spacing = 8
 
-        for i in range(total):
-            page = i + 1
-            is_active = page in active_pages
+        for i, page in enumerate(ordered):
+            is_active = page in active_set
             thumb = ThumbnailWidget(page, is_active)
             thumb.clicked.connect(self._on_thumbnail_clicked)
             thumb.double_clicked.connect(self._on_thumbnail_double_clicked)
@@ -305,11 +317,12 @@ class PDFEditorView(QWidget):
             self._grid_layout.addWidget(thumb, row, col)
             self._thumbnails.append(thumb)
             self._thumb_tops[page] = row * (thumb_h + spacing)
+            thumb.set_number(i + 1)
 
         # El widget de contenido debe crecer por su contenido para que el
         # QScrollArea active la barra vertical (widgetResizable=True fuerza
         # el alto al viewport, por lo que la altura mínima marca el rango).
-        rows = (total + cols - 1) // cols
+        rows = (len(ordered) + cols - 1) // cols
         content_h = rows * (thumb_h + spacing) - spacing + 24
         self._grid_widget.setMinimumSize(cols * thumb_w + (cols - 1) * spacing + 24, content_h)
 
@@ -355,11 +368,21 @@ class PDFEditorView(QWidget):
         for thumb in self._thumbnails:
             thumb.set_selected(thumb.page_num == page)
 
+        # Navega la vista previa a la posición (nuevo nº de hoja) del editor.
+        active = self._vm.get_active_pages()
+        if page in active:
+            self._state.pdf_current_page = active.index(page) + 1
+            main_window = self.window()
+            if hasattr(main_window, '_render_current_page'):
+                main_window._render_current_page()
+
     def _on_thumbnail_double_clicked(self, page: int):
-        self._state.pdf_current_page = page
-        main_window = self.window()
-        if hasattr(main_window, '_render_current_page'):
-            main_window._render_current_page()
+        active = self._vm.get_active_pages()
+        if page in active:
+            self._state.pdf_current_page = active.index(page) + 1
+            main_window = self.window()
+            if hasattr(main_window, '_render_current_page'):
+                main_window._render_current_page()
 
     def _on_toggle(self):
         if self._selected_page:
@@ -382,9 +405,51 @@ class PDFEditorView(QWidget):
                     self._vm.move_page(idx, idx + 1)
 
     def _refresh_grid(self):
-        active_pages = self._vm.get_active_pages()
-        for thumb in self._thumbnails:
-            thumb.set_active(thumb.page_num in active_pages)
+        """Reordena el grid según el orden de las páginas activas (Mover ↑/↓).
+
+        Reubica los thumbnails existentes sin volver a renderizarlos ni
+        perder la selección actual.
+        """
+        active = self._vm.get_active_pages()
+        active_set = set(active)
+        total = self._state.pdf_total_pages
+        excluded = [p for p in range(1, total + 1) if p not in active_set]
+        ordered = list(active) + excluded
+
+        thumb_by_page = {t.page_num: t for t in self._thumbnails}
+        cols = 4
+        thumb_w = PDF_THUMBNAIL_WIDTH + 10
+        thumb_h = PDF_THUMBNAIL_HEIGHT + 30
+        spacing = 8
+
+        self._thumb_tops.clear()
+        idx = 0
+        for page in ordered:
+            thumb = thumb_by_page.get(page)
+            if thumb is None:
+                continue
+            row = idx // cols
+            col = idx % cols
+            self._grid_layout.addWidget(thumb, row, col)
+            thumb.set_active(page in active_set)
+            thumb.set_selected(page == self._selected_page)
+            thumb.set_number(idx + 1)
+            self._thumb_tops[page] = row * (thumb_h + spacing)
+            idx += 1
+
+        rows = (idx + cols - 1) // cols
+        content_h = rows * (thumb_h + spacing) - spacing + 24
+        self._grid_widget.setMinimumSize(
+            cols * thumb_w + (cols - 1) * spacing + 24, content_h
+        )
+        self._sync_preview()
+
+    def _sync_preview(self):
+        """Sincroniza la vista previa con el orden y las páginas activas del editor."""
+        active = self._vm.get_active_pages()
+        main_window = self.window()
+        if hasattr(main_window, 'pdf_preview'):
+            main_window.pdf_preview.set_active_sequence(active)
 
     def apply_theme(self, dark: bool):
         """Reaplica el tema al toolbar y a los thumbnails."""

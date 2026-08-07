@@ -5,10 +5,11 @@ Compone sidebar, header, área de contenido (QStackedWidget)
 y panel lateral de PDF preview como dock widget.
 """
 import logging
+import os
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QStackedWidget, QSplitter, QDockWidget,
+    QStackedWidget, QSplitter, QDockWidget, QMessageBox,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -116,7 +117,6 @@ class MainWindow(QMainWindow):
         placeholder_names = [
             ("📁 Workspace", ViewId.WORKSPACE),
             ("📊 Analizador", ViewId.ANALYZER),
-            ("⚠️ Exclusiones", ViewId.EXCLUSIONS),
             ("✂️ Fragmentar", ViewId.PROCESS),
             ("📄 Editor PDF", ViewId.PDF_EDITOR),
             ("📖 Documentación", ViewId.DOCS),
@@ -153,8 +153,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+N"), self, lambda: self.navigate_to(ViewId.WORKSPACE))
         QShortcut(QKeySequence("Ctrl+1"), self, lambda: self.navigate_to(ViewId.WORKSPACE))
         QShortcut(QKeySequence("Ctrl+2"), self, lambda: self.navigate_to(ViewId.ANALYZER))
-        QShortcut(QKeySequence("Ctrl+3"), self, lambda: self.navigate_to(ViewId.EXCLUSIONS))
-        QShortcut(QKeySequence("Ctrl+4"), self, lambda: self.navigate_to(ViewId.PROCESS))
+        QShortcut(QKeySequence("Ctrl+3"), self, lambda: self.navigate_to(ViewId.PROCESS))
 
     def _connect_signals(self):
         """Conecta señales entre componentes."""
@@ -162,6 +161,7 @@ class MainWindow(QMainWindow):
         self._header.dual_view_toggled.connect(self._on_dual_view_toggled)
         self._header.theme_toggled.connect(self._on_theme_toggled)
         self._header.save_requested.connect(self._on_save)
+        self._header.load_requested.connect(self._on_load)
 
         # PDF preview signals
         self._pdf_preview.page_changed.connect(self._on_page_changed)
@@ -199,15 +199,54 @@ class MainWindow(QMainWindow):
             apply(dark)
 
     def _on_save(self):
-        """Guarda la sesión actual."""
+        """Guarda la configuración actual y confirma al usuario."""
         try:
             session_path = "session.json"
             self._container.gestionar_sesion.guardar(
                 session_path, self._state.to_dict()
             )
-            self._state.add_log("SUCCESS", "Sesión guardada exitosamente.")
+            self._state.add_log("SUCCESS", "Configuración guardada exitosamente.")
+            QMessageBox.information(
+                self, "Configuración guardada",
+                "La configuración se guardó exitosamente.",
+            )
         except Exception as e:
             self._state.add_log("ERR", f"Error al guardar sesión: {e}")
+            QMessageBox.critical(
+                self, "Error",
+                f"No se pudo guardar la configuración:\n{e}",
+            )
+
+    def _on_load(self):
+        """Carga la configuración guardada a mano y la aplica al estado."""
+        session_path = "session.json"
+        if not os.path.exists(session_path):
+            QMessageBox.warning(
+                self, "Sin configuración",
+                "No hay configuraciones guardadas. Usá el botón Guardar primero.",
+            )
+            return
+        try:
+            data = self._container.gestionar_sesion.cargar(session_path)
+            if data:
+                self._state.from_dict(data)
+                self._state.add_log("SUCCESS", "Configuración cargada exitosamente.")
+                QMessageBox.information(
+                    self, "Configuración cargada",
+                    "La configuración guardada se cargó correctamente.",
+                )
+            else:
+                self._state.add_log("WARN", "La configuración guardada está vacía.")
+                QMessageBox.warning(
+                    self, "Sin configuración",
+                    "La configuración guardada está vacía.",
+                )
+        except Exception as e:
+            self._state.add_log("ERR", f"Error al cargar configuración: {e}")
+            QMessageBox.critical(
+                self, "Error",
+                f"No se pudo cargar la configuración:\n{e}",
+            )
 
     def _on_page_changed(self, page: int):
         """Actualiza la página del PDF en el estado (el preview maneja el render)."""

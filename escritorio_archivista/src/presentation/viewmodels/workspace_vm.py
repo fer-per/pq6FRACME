@@ -44,6 +44,8 @@ class LoadInventoryWorker(QRunnable):
                 segmentos=self._state.segmentos or None,
                 exclusiones=self._state.exclusions or None,
                 page_map=self._state.page_map or None,
+                active_pages=self._state.active_pages or None,
+                total_pdf_pages=self._state.pdf_total_pages or None,
                 auto_detect=self._state.fila_datos_auto,
             )
             self.signals.finished.emit(result)

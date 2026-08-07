@@ -5,7 +5,6 @@ Crea la instancia de QApplication, el Container DI, el AppState
 y la MainWindow. Registra todas las vistas.
 """
 import logging
-import os
 import sys
 
 from PySide6.QtWidgets import QApplication
@@ -38,9 +37,6 @@ def create_app(argv: list) -> QApplication:
 
     # Crear estado global
     state = AppStateVM()
-
-    # Intentar cargar sesión previa
-    _load_session(container, state)
 
     # Crear ventana principal
     window = MainWindow(container, state)
@@ -77,13 +73,6 @@ def _register_views(window: MainWindow, container: Container, state: AppStateVM)
         logger.warning("AnalyzerView no disponible: %s", e)
 
     try:
-        from src.presentation.views.exclusions_view import ExclusionsView
-        exclusions = ExclusionsView(container, state)
-        window.register_view(ViewId.EXCLUSIONS, exclusions)
-    except ImportError as e:
-        logger.warning("ExclusionsView no disponible: %s", e)
-
-    try:
         from src.presentation.views.process_view import ProcessView
         process = ProcessView(container, state)
         window.register_view(ViewId.PROCESS, process)
@@ -96,16 +85,3 @@ def _register_views(window: MainWindow, container: Container, state: AppStateVM)
         window.register_view(ViewId.PDF_EDITOR, pdf_editor)
     except ImportError as e:
         logger.warning("PDFEditorView no disponible: %s", e)
-
-
-def _load_session(container: Container, state: AppStateVM):
-    """Intenta cargar la sesión previa."""
-    session_path = "session.json"
-    if os.path.exists(session_path):
-        try:
-            data = container.gestionar_sesion.cargar(session_path)
-            if data:
-                state.from_dict(data)
-                logger.info("Sesión previa cargada.")
-        except Exception as e:
-            logger.warning("Error cargando sesión: %s", e)

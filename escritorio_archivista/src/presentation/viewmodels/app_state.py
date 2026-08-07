@@ -62,6 +62,7 @@ class AppStateVM(QObject):
         self._overrides: dict = {}
         self._page_map: dict = {}
         self._active_pages: list = []
+        self._incidencias_validadas: set = set()
 
         # ─── Estado del PDF ──────────────────────────────────
         self._pdf_current_page: int = 1
@@ -250,6 +251,15 @@ class AppStateVM(QObject):
         self._active_pages = value
 
     @property
+    def incidencias_validadas(self) -> set:
+        """IDs de registros cuyas incidencias fueron validadas (no son error)."""
+        return self._incidencias_validadas
+
+    @incidencias_validadas.setter
+    def incidencias_validadas(self, value):
+        self._incidencias_validadas = set(value or ())
+
+    @property
     def acervo_num(self) -> str:
         return self._acervo_num
 
@@ -297,6 +307,7 @@ class AppStateVM(QObject):
             "overrides": self._overrides,
             "page_map": self._page_map,
             "active_pages": self._active_pages,
+            "incidencias_validadas": sorted(self._incidencias_validadas),
             "records": self._records,
             "exclusions": self._exclusions,
             "suggestions": self._suggestions,
@@ -318,6 +329,7 @@ class AppStateVM(QObject):
         self._overrides = data.get("overrides", {})
         self._page_map = data.get("page_map", {})
         self._active_pages = data.get("active_pages", [])
+        self._incidencias_validadas = set(data.get("incidencias_validadas", []))
         self._records = data.get("records", [])
         self._exclusions = data.get("exclusions", [])
         self._suggestions = data.get("suggestions", [])

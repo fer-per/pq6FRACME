@@ -31,6 +31,8 @@ class FragmentWorker(QRunnable):
                 segmentos=self._state.segmentos or None,
                 exclusiones=self._state.exclusions or None,
                 page_map=self._state.page_map or None,
+                active_pages=self._state.active_pages or None,
+                total_pdf_pages=self._state.pdf_total_pages,
                 on_progress=lambda c, t, r: self.signals.progress.emit(c, t, r),
             )
             self.signals.finished.emit(result)

@@ -30,6 +30,7 @@ class AnalyzeWorker(QRunnable):
                 page_map=self._state.page_map or None,
                 pag_pdf_inicio=self._state.pag_pdf_inicio,
                 total_pdf_pages=self._state.pdf_total_pages,
+                active_pages=self._state.active_pages or None,
             )
             self.signals.finished.emit(result)
         except Exception as e:
@@ -77,16 +78,78 @@ class AnalyzerVM(QObject):
         self._state.add_log("ERR", f"Error en análisis: {error_msg}")
         self.analysis_error.emit(error_msg)
 
-    def apply_correction(self, record_id: str, new_folios: str):
-        """Aplica una corrección de folios a un registro."""
+    def apply_correction(self, record_id: str, field: str, new_value: str):
+        """Aplica una corrección de un campo específico a un registro."""
         for record in self._state.records:
             if record.id == record_id:
-                record.folios = new_folios
+                setattr(record, field, new_value)
                 record.estado = "VALIDADO"
                 self._state.add_log(
                     "SUCCESS",
-                    f"Corrección aplicada a {record_id}: {new_folios}"
+                    f"Corrección aplicada a {record_id} ({field}): {new_value}"
                 )
                 break
+        self._state.records_changed.emit()
+        self.correction_applied.emit()
+
+    def apply_pagination(self, record_id: str, comparte_hoja: bool,
+                         pg_pdf_manual: str):
+        """Aplica la configuración de paginación PDF a un registro.
+
+        ``comparte_hoja`` hace que el fragmento arranque en la misma página
+        donde terminó el registro anterior. ``pg_pdf_manual`` fuerza un rango
+        de páginas específico.
+        """
+        for record in self._state.records:
+            if record.id == record_id:
+                record.comparte_hoja = bool(comparte_hoja)
+                record.pg_pdf_manual = pg_pdf_manual or ""
+                record.estado = "VALIDADO"
+                if record.pg_pdf_manual:
+                    self._state.add_log(
+                        "SUCCESS",
+                        f"Paginación manual aplicada a {record_id}: "
+                        f"{record.pg_pdf_manual}"
+                    )
+                else:
+                    self._state.add_log(
+                        "SUCCESS",
+                        f"Compartir hoja {'activado' if comparte_hoja else 'desactivado'} "
+                        f"en {record_id}"
+                    )
+                break
+        self._state.records_changed.emit()
+        self.correction_applied.emit()
+
+    def apply_changes(self, record_id: str, cambios: dict):
+        """Aplica los cambios combinados del modal de corrección.
+
+        ``cambios`` incluye opcionalmente el campo editado (``field``/
+        ``value``) y siempre la paginación (``comparte_hoja``,
+        ``pg_pdf_manual``).
+        """
+        comparte_hoja = bool(cambios.get("comparte_hoja", False))
+        pg_pdf_manual = cambios.get("pg_pdf_manual", "") or ""
+        field = cambios.get("field")
+        value = cambios.get("value")
+
+        for record in self._state.records:
+            if record.id == record_id:
+                if field and value:
+                    setattr(record, field, value)
+                record.comparte_hoja = comparte_hoja
+                record.pg_pdf_manual = pg_pdf_manual
+                record.estado = "VALIDADO"
+                partes = []
+                if field and value:
+                    partes.append(f"{field}: {value}")
+                if pg_pdf_manual:
+                    partes.append(f"Pág. PDF manual: {pg_pdf_manual}")
+                if comparte_hoja:
+                    partes.append("comparte hoja")
+                detalle = "; ".join(partes) if partes else "sin cambios"
+                self._state.add_log("SUCCESS", f"Corrección aplicada a {record_id}: {detalle}")
+                break
+
         self._state.records_changed.emit()
         self.correction_applied.emit()

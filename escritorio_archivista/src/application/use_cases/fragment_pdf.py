@@ -39,6 +39,8 @@ class FragmentarPDFUseCase:
         segmentos: Optional[list] = None,
         exclusiones: Optional[List[ExclusionRule]] = None,
         page_map: Optional[dict] = None,
+        active_pages: Optional[list] = None,
+        total_pdf_pages: int = 0,
         on_progress: Optional[callable] = None,
     ) -> ResultadoFragmentacion:
         """
@@ -61,6 +63,8 @@ class FragmentarPDFUseCase:
             segmentos=segmentos,
             exclusiones=exclusiones,
             page_map=page_map,
+            active_pages=active_pages,
+            total_pdf_pages=total_pdf_pages,
         )
         mapper.start_sequence()
 
@@ -91,8 +95,15 @@ class FragmentarPDFUseCase:
                     logger.warning("Omitido %s: estado REVISAR.", record.id)
                     continue
 
-                # Calcular páginas
-                pages = mapper.folio_str_to_pdf_pages(record.folios)
+                # Calcular páginas (respetando comparte_hoja o rango manual)
+                if record.pg_pdf_manual.strip():
+                    pages = mapper.folio_str_to_pdf_pages(
+                        record.folios, override=record.pg_pdf_manual
+                    )
+                else:
+                    pages = mapper.folio_str_to_pdf_pages(
+                        record.folios, share_last=record.comparte_hoja
+                    )
                 if not pages:
                     pendientes.append({
                         "ID": record.id,

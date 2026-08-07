@@ -66,4 +66,6 @@ class Container:
             segmentos=estado.get("segmentos"),
             exclusiones=estado.get("exclusiones"),
             page_map=estado.get("page_map"),
+            active_pages=estado.get("active_pages"),
+            total_pdf_pages=estado.get("pdf_total_pages"),
         )

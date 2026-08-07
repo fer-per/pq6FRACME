@@ -19,7 +19,7 @@ from src.presentation.theme.icons import theme_icon
 from src.presentation.constants import (
     ViewId, MODULE_ICONS, SIDEBAR_WIDTH_EXPANDED, SIDEBAR_WIDTH_COLLAPSED,
     SIDEBAR_ICON_SIZE, ANIMATION_DURATION_MS,
-    ICON_WORKSPACE, ICON_ANALYZER, ICON_EXCLUSIONS, ICON_PROCESS, ICON_PDF_EDITOR,
+    ICON_WORKSPACE, ICON_ANALYZER, ICON_PROCESS, ICON_PDF_EDITOR,
     ICON_MENU,
 )
 
@@ -115,7 +115,6 @@ class Sidebar(QWidget):
     NAV_ITEMS = [
         (ICON_WORKSPACE, "Espacio de Trabajo", ViewId.WORKSPACE),
         (ICON_ANALYZER,  "Analizador",         ViewId.ANALYZER),
-        (ICON_EXCLUSIONS,"Exclusiones",         ViewId.EXCLUSIONS),
         (ICON_PROCESS,   "Fragmentar",          ViewId.PROCESS),
         (ICON_PDF_EDITOR,"Editor PDF",          ViewId.PDF_EDITOR),
     ]

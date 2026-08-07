@@ -7,6 +7,7 @@ considerando offsets, segmentos, páginas ignoradas y reordenamiento.
 Este módulo depende SOLO de folio_parser (mismo paquete de dominio).
 """
 import logging
+import re
 from typing import List, Optional
 
 from src.domain.services.folio_parser import parse_folios, folio_to_int
@@ -72,17 +73,31 @@ class FolioMapper:
         self.ignoradas_set = set(ignoradas or [])
         self.folio_page_counter = self.pag_pdf_inicio
         self._last_segment: Optional[Segmento] = None
+        self._last_used_page: Optional[int] = None
 
     def start_sequence(self):
         """Reinicia el contador interno. LLAMAR antes de procesar registros."""
         self.folio_page_counter = self.pag_pdf_inicio
         self._last_segment = None
+        self._last_used_page = None
 
-    def folio_str_to_pdf_pages(self, folio_str: str) -> Optional[List[int]]:
+    def folio_str_to_pdf_pages(
+        self,
+        folio_str: str,
+        share_last: bool = False,
+        override: Optional[str] = None,
+    ) -> Optional[List[int]]:
         """
         Convierte un string de folio a lista de páginas PDF reales.
 
-        Algoritmo:
+        Parámetros opcionales (usados en la fragmentación):
+        - ``override``: si se provee un rango de páginas PDF manual (ej.
+          "140-145"), se usan esas páginas literalmente, ignorando el
+          cálculo secuencial.
+        - ``share_last``: si es True, el registro arranca en la misma página
+          donde terminó el registro anterior (comparte la hoja PDF).
+
+        Algoritmo normal:
         1. Parsear el folio a rango (desde_int, hasta_int)
         2. Para cada folio_int en el rango:
            a. Buscar si hay un Segmento activo
@@ -93,6 +108,17 @@ class FolioMapper:
            f. Si hay page_map, traducir la página
         3. Retornar lista de páginas
         """
+        if override:
+            pages = self._parse_manual_pages(override)
+            if pages:
+                self.folio_page_counter = pages[-1] + 1
+                self._last_used_page = pages[-1]
+                return pages
+            return None
+
+        if share_last and self._last_used_page is not None:
+            self.folio_page_counter = self._last_used_page
+
         parsed = parse_folios(folio_str)
         if parsed is None:
             return None
@@ -126,11 +152,44 @@ class FolioMapper:
                     continue
 
             pages.append(page)
+
+        if pages:
+            self._last_used_page = pages[-1]
         return pages
 
-    def folio_str_to_pdf_range(self, folio_str: str) -> Optional[str]:
+    @staticmethod
+    def _parse_manual_pages(override: str) -> Optional[List[int]]:
+        """Convierte un rango manual '140-149' o '1,5-7' a lista de páginas."""
+        override = override.strip()
+        if not override:
+            return None
+        pages: List[int] = []
+        try:
+            for part in re.split(r'[;,]', override):
+                part = part.strip()
+                if not part:
+                    continue
+                if '-' in part:
+                    start_str, end_str = part.split('-', 1)
+                    start, end = int(start_str), int(end_str)
+                    step = 1 if start <= end else -1
+                    pages.extend(range(start, end + step, step))
+                else:
+                    pages.append(int(part))
+        except ValueError:
+            return None
+        return pages
+
+    def folio_str_to_pdf_range(
+        self,
+        folio_str: str,
+        share_last: bool = False,
+        override: Optional[str] = None,
+    ) -> Optional[str]:
         """Retorna '1-4' o '7' o None."""
-        pages = self.folio_str_to_pdf_pages(folio_str)
+        pages = self.folio_str_to_pdf_pages(
+            folio_str, share_last=share_last, override=override
+        )
         if not pages:
             return None
         if len(pages) == 1:
@@ -160,6 +219,8 @@ def mapper_from_config(
     segmentos: Optional[list] = None,
     exclusiones: Optional[list] = None,
     page_map: Optional[dict] = None,
+    active_pages: Optional[list] = None,
+    total_pdf_pages: Optional[int] = None,
 ) -> FolioMapper:
     """
     Factory que crea un FolioMapper desde parámetros de configuración.
@@ -169,6 +230,10 @@ def mapper_from_config(
         segmentos: Lista de dicts con {"folio_inicio": "001r", "pag_pdf_inicio": 1}.
         exclusiones: Lista de ExclusionRule — las de tipo "IGNORAR" generan páginas a saltar.
         page_map: Dict {página_original: página_nueva} o {página: None}.
+        active_pages: Páginas activas seleccionadas en el editor PDF. Las
+            páginas ausentes (descartadas) se tratan como ignoradas y no
+            cuentan en el mapeo folio → página.
+        total_pdf_pages: Cantidad total de páginas físicas del PDF.
 
     Returns:
         FolioMapper configurado.
@@ -178,6 +243,17 @@ def mapper_from_config(
         if excl.tipo == 'IGNORAR':
             for p in range(int(excl.desde), int(excl.hasta) + 1):
                 ignoradas.append(p)
+
+    # Las páginas descartadas en el editor PDF también se ignoran.
+    # Cuando se definen páginas activas, estas gobiernan el mapeo y el
+    # page_map (reindexado antiguo) se descarta para no extraer páginas
+    # físicas incorrectas tras eliminar una hoja.
+    if active_pages and total_pdf_pages:
+        activas = set(active_pages)
+        for p in range(1, int(total_pdf_pages) + 1):
+            if p not in activas:
+                ignoradas.append(p)
+        page_map = None
 
     segmentos_objs = []
     for seg_data in (segmentos or []):

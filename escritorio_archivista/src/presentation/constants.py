@@ -10,18 +10,17 @@ class ViewId:
     """Identificadores de vistas para navegación con sidebar."""
     WORKSPACE = 0
     ANALYZER = 1
-    EXCLUSIONS = 2
-    PROCESS = 3
-    PDF_EDITOR = 4
-    DOCS = 5
-    SUPPORT = 6
+    PROCESS = 2
+    PDF_EDITOR = 3
+    DOCS = 4
+    SUPPORT = 5
 
 
 # Dimensiones de UI
 SIDEBAR_WIDTH_EXPANDED = 200
 SIDEBAR_WIDTH_COLLAPSED = 52
 SIDEBAR_ICON_SIZE = 20
-PDF_THUMBNAIL_WIDTH = 130
+PDF_THUMBNAIL_WIDTH = 144
 PDF_THUMBNAIL_HEIGHT = 184
 TOOLBAR_ICON_SIZE = 18
 MIN_WINDOW_WIDTH = 1200
@@ -43,7 +42,6 @@ ICON_SUN = str(THEME_ICONS_DIR / "sol.ico")    # sol → modo claro
 MODULE_ICON_DIRS = {
     "workspace": ICONS_DIR / "espaciotrabajo",
     "analyzer": ICONS_DIR / "analizador",
-    "exclusions": ICONS_DIR / "exclusiones",
     "process": ICONS_DIR / "fragmentar",
     "pdf_editor": ICONS_DIR / "editorpdf",
     "docs": ICONS_DIR / "docs",
@@ -53,7 +51,6 @@ MODULE_ICON_DIRS = {
 ICON_WORKSPACE = str(MODULE_ICON_DIRS["workspace"] / "espaciotrabajo.ico")
 ICON_ANALYZER = str(MODULE_ICON_DIRS["analyzer"] / "analizador.ico")
 ICON_ANALYZE_CAM = str(MODULE_ICON_DIRS["analyzer"] / "camanalizador.ico")
-ICON_EXCLUSIONS = str(MODULE_ICON_DIRS["exclusions"] / "exclusiones.ico")
 ICON_PROCESS = str(MODULE_ICON_DIRS["process"] / "fragmentar.ico")
 ICON_PDF_EDITOR = str(MODULE_ICON_DIRS["pdf_editor"] / "editorpdf.ico")
 
@@ -71,6 +68,7 @@ ICON_REDO = str(MODULE_ICON_DIRS["pdf_editor"] / "rehacer.ico")
 # Íconos de acciones compartidas (usados por varios módulos)
 ACCIONES_ICONS_DIR = ICONS_DIR / "acciones"
 ICON_SAVE = str(ACCIONES_ICONS_DIR / "guardar.ico")
+ICON_LOAD = str(ICONS_DIR / "fragmentar" / "documento.ico")
 
 # Íconos del toggle de vista del PDF (header)
 HEADER_ICONS_DIR = ICONS_DIR / "header"
@@ -108,7 +106,6 @@ class ModuleIcon:
     """
     WORKSPACE = "\u25A4"    # ▤ carpeta/documento → carga y gestión de archivos
     ANALYZER = "\u2611"     # ☑ casilla verificada → validación de datos
-    EXCLUSIONS = "\u2691"   # ⚑ bandera → exclusiones/saltos
     PROCESS = "\u2702"      # ✂ tijeras → fragmentación del PDF
     PDF_EDITOR = "\u25AD"   # ▭ página → edición de páginas PDF
     DOCS = "\u2261"         # ≡ líneas → documentación
@@ -118,7 +115,6 @@ class ModuleIcon:
 MODULE_ICONS = {
     "workspace": ModuleIcon.WORKSPACE,
     "analyzer": ModuleIcon.ANALYZER,
-    "exclusions": ModuleIcon.EXCLUSIONS,
     "process": ModuleIcon.PROCESS,
     "pdf_editor": ModuleIcon.PDF_EDITOR,
     "docs": ModuleIcon.DOCS,

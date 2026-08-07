@@ -10,8 +10,8 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QGroupBox, QFileDialog,
 )
-from PySide6.QtCore import Qt, QSize, QTimer
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, QSize, QTimer, QUrl
+from PySide6.QtGui import QIcon, QDesktopServices
 
 from src.application.container import Container
 from src.presentation.viewmodels.app_state import AppStateVM
@@ -84,6 +84,14 @@ class ProcessView(QWidget):
         self._select_dir_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         self._select_dir_btn.clicked.connect(self._on_select_dir)
         output_layout.addWidget(self._select_dir_btn)
+
+        self._open_dir_btn = QPushButton(" Abrir carpeta")
+        self._open_dir_btn.setProperty("flat", True)
+        self._open_dir_btn.setIcon(theme_icon(ICON_FOLDER, False))
+        self._open_dir_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
+        self._open_dir_btn.clicked.connect(self._on_open_dir)
+        self._open_dir_btn.setEnabled(bool(self._state.output_dir))
+        output_layout.addWidget(self._open_dir_btn)
         layout.addLayout(output_layout)
 
         # Botón fragmentar + progreso
@@ -150,6 +158,15 @@ class ProcessView(QWidget):
         if path:
             self._vm.set_output_dir(path)
             self._output_label.setText(path)
+            self._open_dir_btn.setEnabled(True)
+
+    def _on_open_dir(self):
+        path = self._state.output_dir
+        if not path:
+            self._open_dir_btn.setEnabled(False)
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(path)):
+            self._status_label.setText(f"No se pudo abrir: {path}")
 
     def _on_started(self):
         self._fragment_btn.setEnabled(False)
@@ -199,6 +216,7 @@ class ProcessView(QWidget):
             )
         )
         self._select_dir_btn.setIcon(theme_icon(ICON_SELECT, dark))
+        self._open_dir_btn.setIcon(theme_icon(ICON_FOLDER, dark))
         self._fragment_btn.setIcon(white_icon(ICON_PROCESS))
         self._output_label.setStyleSheet(
             f"color: {self._palette['text_secondary']};"

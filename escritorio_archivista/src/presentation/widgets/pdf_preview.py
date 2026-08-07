@@ -79,10 +79,13 @@ class PDFPreview(QWidget):
         self._doc_id = 0
         self._page_labels = []
         self._empty_label = None
-        self._page_dims = []        # (ancho, alto) por página
-        self._page_tops = []        # posiciones Y acumuladas por página
-        self._pixmaps = {}          # page -> QPixmap
-        self._pending = set()       # páginas en renderizado
+        self._page_dims = []        # (ancho, alto) por página visible
+        self._page_tops = []         # posiciones Y acumuladas por página visible
+        self._visible_pages = []     # páginas físicas mostradas, en orden de secuencia
+        self._sequence = []          # páginas físicas activas en el orden del editor PDF
+        self._excluded = set()       # páginas físicas descartadas en el editor PDF
+        self._pixmaps = {}           # page -> QPixmap
+        self._pending = set()        # páginas en renderizado
 
         self._thread_pool = QThreadPool(self)
         self._thread_pool.setMaxThreadCount(3)
@@ -154,7 +157,7 @@ class PDFPreview(QWidget):
         self._page_spin = QSpinBox()
         self._page_spin.setMinimum(1)
         self._page_spin.setMaximum(1)
-        self._page_spin.setFixedWidth(65)
+        self._page_spin.setFixedWidth(72)
         self._page_spin.setFixedHeight(28)
         self._page_spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._page_spin.valueChanged.connect(self._on_page_spin_changed)
@@ -296,6 +299,8 @@ class PDFPreview(QWidget):
         self._doc_id += 1
         self._pixmaps.clear()
         self._pending.clear()
+        self._excluded = set()
+        self._sequence = []
         self._total_pages = 0
         self._page_spin.setMaximum(1)
         self._page_spin.setValue(1)
@@ -310,13 +315,48 @@ class PDFPreview(QWidget):
         self._total_label.setText(f"/ {total}")
         self._rebuild_document()
 
-    def set_current_page(self, page: int):
-        page = max(1, min(page, self._total_pages or 1))
-        self._current_page = page
+    def set_excluded_pages(self, excluded: set):
+        """Oculta de la vista previa las páginas físicas descartadas."""
+        excluded = set(excluded or ())
+        if excluded == self._excluded:
+            return
+        self._excluded = excluded
+        self._rebuild_document()
+
+    def set_active_sequence(self, active_pages):
+        """Define la secuencia de páginas físicas que debe mostrar la vista previa.
+
+        ``active_pages`` es la lista ya ordenada de páginas físicas incluidas
+        (el orden resultante del editor PDF tras Mover ↑/↓). La posición
+        mostrada (1-based) corresponde a la página física
+        ``active_pages[pos-1]``.
+        """
+        seq = [int(p) for p in (active_pages or []) if p is not None]
+        if seq == self._sequence:
+            return
+        self._sequence = seq
+        self._rebuild_document()
+
+    def set_current_page(self, pos: int):
+        """Posiciona la vista previa en la posición de la secuencia (1-based)."""
+        if not self._visible_pages:
+            return
+        pos = max(1, min(pos, len(self._visible_pages)))
+        self._current_page = pos
+        self._sync_spin(pos)
+        self._scroll_to_page(pos)
+
+    def _sync_total_ui(self):
+        """El contador y el campo de número reflejan la cantidad de páginas."""
+        n = len(self._visible_pages)
+        self._total_label.setText(f"/ {n}")
+        self._page_spin.setMaximum(max(1, n))
+
+    def _sync_spin(self, pos: int):
+        """Pone el spin en la posición de secuencia ``pos``."""
         self._page_spin.blockSignals(True)
-        self._page_spin.setValue(page)
+        self._page_spin.setValue(max(1, min(pos, len(self._visible_pages) or 1)))
         self._page_spin.blockSignals(False)
-        self._scroll_to_page(page)
 
     # ─── Construcción del documento ────────────────────────
 
@@ -332,9 +372,37 @@ class PDFPreview(QWidget):
                 widget.deleteLater()
 
         self._page_labels = []
+        self._visible_pages = []
         self._empty_label = None
         if self._total_pages <= 0:
+            self._total_label.setText("/ 0")
+            self._page_spin.setMaximum(1)
             empty = QLabel("Cargue un PDF para visualizar")
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty.setStyleSheet(
+                f"color: {self._palette['text_secondary']}; background: transparent;"
+            )
+            empty.setFont(get_font("body"))
+            empty.setSizePolicy(
+                QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
+            )
+            self._empty_label = empty
+            self._pages_layout.addWidget(empty)
+            self._pages_container.setMinimumHeight(0)
+            self._scroll.verticalScrollBar().setValue(0)
+            return
+
+        if self._sequence:
+            self._visible_pages = [
+                p for p in self._sequence if 1 <= p <= self._total_pages
+            ]
+        else:
+            self._visible_pages = [
+                p for p in range(1, self._total_pages + 1) if p not in self._excluded
+            ]
+        self._sync_total_ui()
+        if not self._visible_pages:
+            empty = QLabel("Todas las páginas están excluidas")
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             empty.setStyleSheet(
                 f"color: {self._palette['text_secondary']}; background: transparent;"
@@ -351,9 +419,9 @@ class PDFPreview(QWidget):
 
         default_w = int(595 * self._zoom / 100)
         default_h = int(842 * self._zoom / 100)
-        self._page_dims = [(default_w, default_h)] * self._total_pages
+        self._page_dims = [(default_w, default_h)] * len(self._visible_pages)
 
-        for page in range(1, self._total_pages + 1):
+        for i, page in enumerate(self._visible_pages):
             label = QLabel()
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setFixedSize(default_w, default_h)
@@ -378,7 +446,7 @@ class PDFPreview(QWidget):
             y += h + _SPACING
         self._page_tops = tops
 
-        total_h = sum(h for _, h in self._page_dims) + _SPACING * (self._total_pages - 1)
+        total_h = sum(h for _, h in self._page_dims) + _SPACING * (len(self._page_dims) - 1)
         max_w = max((w for w, _ in self._page_dims), default=0)
         self._pages_container.setMinimumHeight(total_h)
         self._pages_container.setMinimumWidth(max_w)
@@ -386,17 +454,17 @@ class PDFPreview(QWidget):
     # ─── Renderizado perezoso ──────────────────────────────
 
     def _render_visible(self):
-        if not self._renderer or self._total_pages <= 0:
+        if not self._renderer or not self._visible_pages:
             return
         sb = self._scroll.verticalScrollBar()
         y0 = sb.value() - _BUFFER_PX
         y1 = sb.value() + self._scroll.viewport().height() + _BUFFER_PX
 
-        for page in range(1, self._total_pages + 1):
-            top = self._page_tops[page - 1]
+        for i, page in enumerate(self._visible_pages):
+            top = self._page_tops[i]
             if top > y1:
                 break
-            height = self._page_dims[page - 1][1]
+            height = self._page_dims[i][1]
             if top + height < y0:
                 continue
             if page in self._pixmaps or page in self._pending:
@@ -411,17 +479,21 @@ class PDFPreview(QWidget):
         if doc_id != self._doc_id or page > self._total_pages:
             return
         self._pending.discard(page)
+        try:
+            idx = self._visible_pages.index(page)
+        except ValueError:
+            return
         image = QImage()
         image.loadFromData(data)
         pixmap = QPixmap.fromImage(image)
         if pixmap.isNull():
             return
         self._pixmaps[page] = pixmap
-        label = self._page_labels[page - 1]
+        label = self._page_labels[idx]
         label.setPixmap(pixmap)
         label.setText("")
         label.setFixedSize(pixmap.size())
-        self._page_dims[page - 1] = (pixmap.width(), pixmap.height())
+        self._page_dims[idx] = (pixmap.width(), pixmap.height())
         self._recompute_geometry()
 
     def _on_page_failed(self, page: int):
@@ -434,18 +506,19 @@ class PDFPreview(QWidget):
         vh = self._scroll.viewport().height()
         center = value + vh // 2
         idx = bisect.bisect_right(self._page_tops, center) - 1
-        page = max(1, idx + 1)
-        if page != self._current_page:
-            self._current_page = page
-            self._page_spin.blockSignals(True)
-            self._page_spin.setValue(page)
-            self._page_spin.blockSignals(False)
-            self.page_changed.emit(page)
-
-    def _scroll_to_page(self, page: int):
-        if self._total_pages <= 0:
+        if not (0 <= idx < len(self._visible_pages)):
             return
-        top = self._page_tops[page - 1]
+        pos = idx + 1
+        if pos != self._current_page:
+            self._current_page = pos
+            self._sync_spin(pos)
+            self.page_changed.emit(pos)
+
+    def _scroll_to_page(self, pos: int):
+        if not self._visible_pages:
+            return
+        idx = max(0, min(pos - 1, len(self._visible_pages) - 1))
+        top = self._page_tops[idx]
         sb = self._scroll.verticalScrollBar()
         sb.setValue(max(0, top - 4))
 
@@ -454,7 +527,7 @@ class PDFPreview(QWidget):
             self.set_current_page(self._current_page - 1)
 
     def _next_page(self):
-        if self._current_page < self._total_pages:
+        if self._current_page < len(self._visible_pages):
             self.set_current_page(self._current_page + 1)
 
     def _on_page_spin_changed(self, value: int):
@@ -471,11 +544,12 @@ class PDFPreview(QWidget):
 
         default_w = int(595 * self._zoom / 100)
         default_h = int(842 * self._zoom / 100)
-        for page, label in enumerate(self._page_labels, start=1):
+        for idx, page in enumerate(self._visible_pages):
+            label = self._page_labels[idx]
             label.setPixmap(QPixmap())
             label.setText(f"Página {page}\nCargando\u2026")
             label.setFixedSize(default_w, default_h)
-            self._page_dims[page - 1] = (default_w, default_h)
+            self._page_dims[idx] = (default_w, default_h)
 
         self._recompute_geometry()
         self._scroll_to_page(self._current_page)

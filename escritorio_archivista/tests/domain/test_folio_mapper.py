@@ -156,3 +156,22 @@ class TestMapperFromConfig:
         ]
         max_p = mapper.max_pdf_page(records)
         assert max_p == 10  # 5v = folio int 10
+
+    def test_paginas_descartadas_no_cuentan(self):
+        """Una página descartada en el editor PDF se salta y no cuenta."""
+        # PDF físico 1..4 donde la 2 es duplicada; el usuario la descarta
+        mapper = mapper_from_config(
+            pag_pdf_inicio=1,
+            active_pages=[1, 3, 4],
+            total_pdf_pages=4,
+        )
+        mapper.start_sequence()
+        # 1r→1, 1v→skip 2 →3
+        assert mapper.folio_str_to_pdf_pages("001r-001v") == [1, 3]
+        # 2r→4, 2v→5
+        assert mapper.folio_str_to_pdf_pages("002r-002v") == [4, 5]
+
+    def test_sin_paginas_activas_no_ignora(self):
+        mapper = mapper_from_config(pag_pdf_inicio=1, total_pdf_pages=4)
+        mapper.start_sequence()
+        assert mapper.folio_str_to_pdf_pages("001r-001v") == [1, 2]

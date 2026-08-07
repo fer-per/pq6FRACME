@@ -34,6 +34,8 @@ class CargarInventarioUseCase:
         segmentos: Optional[list] = None,
         exclusiones: Optional[list] = None,
         page_map: Optional[dict] = None,
+        active_pages: Optional[list] = None,
+        total_pdf_pages: Optional[int] = None,
         auto_detect: bool = True,
     ) -> ResultadoCarga:
         """
@@ -69,6 +71,8 @@ class CargarInventarioUseCase:
             segmentos=segmentos,
             exclusiones=exclusiones,
             page_map=page_map,
+            active_pages=active_pages,
+            total_pdf_pages=total_pdf_pages,
         )
 
         # 4. Asignar pg_pdf

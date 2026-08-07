@@ -30,6 +30,7 @@ class AnalizarDatosUseCase:
         page_map: Optional[dict] = None,
         pag_pdf_inicio: int = 1,
         total_pdf_pages: int = 0,
+        active_pages: Optional[list] = None,
     ) -> ResultadoAnalisis:
         """
         Ejecuta análisis completo del inventario.
@@ -44,12 +45,14 @@ class AnalizarDatosUseCase:
 
         exclusions = exclusions or []
 
-        # 1. Crear mapper
+# 1. Crear mapper
         mapper = mapper_from_config(
             pag_pdf_inicio=pag_pdf_inicio,
             segmentos=segmentos,
             exclusiones=exclusions,
             page_map=page_map,
+            active_pages=active_pages,
+            total_pdf_pages=total_pdf_pages,
         )
 
         # 2. Resetear estados
@@ -57,11 +60,19 @@ class AnalizarDatosUseCase:
             if record.estado != "FRAGMENTADO":
                 record.estado = ""
 
-        # 3. Recalcular pg_pdf
+        # 3. Recalcular pg_pdf (respetando comparte_hoja y pg_pdf_manual)
         mapper.start_sequence()
         for record in records:
-            pdf_range = mapper.folio_str_to_pdf_range(record.folios)
-            record.pg_pdf = pdf_range or ""
+            if record.pg_pdf_manual.strip():
+                pages = mapper.folio_str_to_pdf_pages(
+                    record.folios, override=record.pg_pdf_manual
+                )
+                record.pg_pdf = record.pg_pdf_manual.strip() if pages else ""
+            else:
+                pdf_range = mapper.folio_str_to_pdf_range(
+                    record.folios, share_last=record.comparte_hoja
+                )
+                record.pg_pdf = pdf_range or ""
 
         # 4. Ejecutar analizadores
         folios_result = analizar_folios(records, exclusions)

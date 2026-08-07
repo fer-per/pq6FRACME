@@ -6,6 +6,7 @@ click en fila navega al PDF. Tras ejecutar el análisis, las celdas con
 errores se resaltan en rojo.
 """
 import logging
+import re
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
@@ -16,11 +17,12 @@ from PySide6.QtCore import QSize
 from src.application.container import Container
 from src.presentation.viewmodels.app_state import AppStateVM
 from src.presentation.viewmodels.analyzer_vm import AnalyzerVM
+from src.domain.entities import AnalysisResult
 from src.presentation.constants import (
     TOOLBAR_ICON_SIZE, ICON_ANALYZE, ICON_CORRECT,
 )
 from src.presentation.widgets.data_table import DataTable
-from src.presentation.widgets.correction_modal import CorrectionModal
+from src.presentation.widgets.field_correction_modal import FieldCorrectionModal
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
 from src.presentation.theme.icons import theme_icon, white_icon
@@ -133,6 +135,47 @@ _RECORD_COLUMNS = [
     ("Esperado", "valor_esperado"),
 ]
 
+# Columnas específicas por analizador (evitar ruido visual mostrando solo
+# los campos relevantes para cada análisis).
+_FOLIOS_COLUMNS = [
+    ("Fila", "fila"),
+    ("N° Reg", "registro"),
+    ("Prot", "protocolo"),
+    ("Folios", "folios"),
+    ("Pág. PDF", "pg_pdf"),
+    ("N° Hojas", "num_hojas"),
+    ("Tipo", "tipo"),
+    ("Descripción", "descripcion"),
+    ("Valor Actual", "valor_actual"),
+    ("Esperado", "valor_esperado"),
+]
+
+_TOPICA_COLUMNS = [
+    ("Fila", "fila"),
+    ("N° Reg", "registro"),
+    ("Prot", "protocolo"),
+    ("Folios", "folios"),
+    ("Pág. PDF", "pg_pdf"),
+    ("Tópica", "data_topica"),
+    ("Tipo", "tipo"),
+    ("Descripción", "descripcion"),
+    ("Valor Actual", "valor_actual"),
+    ("Esperado", "valor_esperado"),
+]
+
+_CRONICA_COLUMNS = [
+    ("Fila", "fila"),
+    ("N° Reg", "registro"),
+    ("Prot", "protocolo"),
+    ("Folios", "folios"),
+    ("Pág. PDF", "pg_pdf"),
+    ("F. Ini", "fecha_inicio"),
+    ("Tipo", "tipo"),
+    ("Descripción", "descripcion"),
+    ("Valor Actual", "valor_actual"),
+    ("Esperado", "valor_esperado"),
+]
+
 # Mapea el tipo de error al campo del registro que debe resaltarse en rojo.
 _ERROR_FIELD = {
     "FORMATO": ("folios",),
@@ -153,10 +196,14 @@ class AnalyzerErrorTab(QWidget):
     presenta un error.
     """
 
-    def __init__(self, name: str, parent=None):
+    def __init__(self, name: str, columns=None, field: str = "",
+                 field_label: str = "", parent=None):
         super().__init__(parent)
         self._palette = get_palette()
         self._name = name
+        self._columns = columns if columns is not None else _RECORD_COLUMNS
+        self._field = field
+        self._field_label = field_label
         self._all_rows = []
         self._records = []
         self._errors = []
@@ -182,8 +229,8 @@ class AnalyzerErrorTab(QWidget):
         layout.addLayout(info_bar)
 
         # Tabla: datos completos del registro + observación/error
-        columns = [label for label, _ in _RECORD_COLUMNS]
-        field_map = [field for _, field in _RECORD_COLUMNS]
+        columns = [label for label, _ in self._columns]
+        field_map = [field for _, field in self._columns]
         self._table = DataTable(columns=columns, field_map=field_map)
         layout.addWidget(self._table)
 
@@ -215,8 +262,7 @@ class AnalyzerErrorTab(QWidget):
         if self._records is not None:
             self.set_data(self._records, self._errors, self._total_revisados)
 
-    @staticmethod
-    def _build_rows(records: list, errors: list) -> list:
+    def _build_rows(self, records: list, errors: list) -> list:
         """Construye una fila por registro con sus datos y errores asociados."""
         errors_by_record = {}
         for error in errors:
@@ -226,8 +272,9 @@ class AnalyzerErrorTab(QWidget):
         for record in records:
             record_errors = errors_by_record.get(record.id, [])
             row = {"_record": record, "_errors": record_errors}
-            for _, field in _RECORD_COLUMNS:
+            for _, field in self._columns:
                 row[field] = getattr(record, field, "")
+            row["num_hojas"] = self._count_sheets(row.get("pg_pdf", ""))
 
             if record_errors:
                 row["tipo"] = ", ".join(e.tipo for e in record_errors)
@@ -247,6 +294,33 @@ class AnalyzerErrorTab(QWidget):
             rows.append(row)
 
         return rows
+
+    @staticmethod
+    def _count_sheets(pg_pdf: str) -> str:
+        """Cuenta las hojas (páginas PDF) que abarca el rango pg_pdf.
+
+        Soporta rangos simples ("1-4"), sueltos ("7") y manuales
+        ("140-145" o "1,5-7").
+        """
+        pg_pdf = (pg_pdf or "").strip()
+        if not pg_pdf:
+            return ""
+        pages = set()
+        try:
+            for part in re.split(r"[;,]", pg_pdf):
+                part = part.strip()
+                if not part:
+                    continue
+                if "-" in part:
+                    start_str, end_str = part.split("-", 1)
+                    start, end = int(start_str), int(end_str)
+                    step = 1 if start <= end else -1
+                    pages.update(range(start, end + step, step))
+                else:
+                    pages.add(int(part))
+        except ValueError:
+            return ""
+        return str(len(pages)) if pages else ""
 
     def get_table(self) -> DataTable:
         return self._table
@@ -328,9 +402,18 @@ class AnalyzerView(QWidget):
         self._tabs.setTabPosition(QTabWidget.TabPosition.North)
 
         self._tab_all = AnalyzerErrorTab("Todos")
-        self._tab_folios = AnalyzerErrorTab("Analizador de Folios")
-        self._tab_topica = AnalyzerErrorTab("Data Tópica")
-        self._tab_cronica = AnalyzerErrorTab("Data Crónica")
+        self._tab_folios = AnalyzerErrorTab(
+            "Analizador de Folios", _FOLIOS_COLUMNS,
+            field="folios", field_label="Folios"
+        )
+        self._tab_topica = AnalyzerErrorTab(
+            "Data Tópica", _TOPICA_COLUMNS,
+            field="data_topica", field_label="Data Tópica"
+        )
+        self._tab_cronica = AnalyzerErrorTab(
+            "Data Crónica", _CRONICA_COLUMNS,
+            field="fecha_inicio", field_label="Fecha Inicio"
+        )
         self._tab_coverage = AnalyzerErrorTab("Cobertura PDF")
 
         self._tabs.addTab(self._tab_all, "Todas las Incidencias")
@@ -358,6 +441,14 @@ class AnalyzerView(QWidget):
         self._correct_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         self._correct_btn.clicked.connect(self._on_correct)
         btn_layout.addWidget(self._correct_btn)
+
+        self._validate_btn = QPushButton(" Validar como Correcto")
+        self._validate_btn.setEnabled(False)
+        self._validate_btn.setCheckable(True)
+        self._validate_btn.setIcon(theme_icon(ICON_CORRECT, False))
+        self._validate_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
+        self._validate_btn.clicked.connect(self._on_validate_toggled)
+        btn_layout.addWidget(self._validate_btn)
         layout.addLayout(btn_layout)
 
     def _connect_signals(self):
@@ -370,14 +461,25 @@ class AnalyzerView(QWidget):
         # Conectar click en cada tabla de error → habilitar corrección + navegar PDF
         for tab in [self._tab_all, self._tab_folios, self._tab_topica,
                      self._tab_cronica, self._tab_coverage]:
-            tab.get_table().row_clicked.connect(self._on_error_row_clicked)
+            tab.get_table().row_clicked.connect(
+                lambda row, data, t=tab: self._on_error_row_clicked(row, data, t)
+            )
 
-    def _on_error_row_clicked(self, row: int, data):
-        """Habilita corrección y navega a la página PDF del registro."""
+    def _on_error_row_clicked(self, row: int, data, tab):
+        """Guarda selección, habilita corrección/validación y navega a la página PDF."""
+        self._current_tab = tab
+        self._current_row_data = data
         record = data.get("_record") if isinstance(data, dict) else data
-        errors = data.get("_errors", []) if isinstance(data, dict) else []
-        self._current_error = errors[0] if errors else None
-        self._correct_btn.setEnabled(bool(errors))
+
+        # Permite editar la fila: campo del analizador y/o paginación PDF.
+        self._correct_btn.setEnabled(True)
+
+        # Estado del botón validar según el registro seleccionado
+        rid = record.id if record is not None else None
+        self._validate_btn.setEnabled(rid is not None)
+        self._validate_btn.setChecked(
+            rid in self._state.incidencias_validadas
+        )
 
         # Navegar a la página PDF asignada del registro
         if record is not None and record.pg_pdf:
@@ -390,6 +492,33 @@ class AnalyzerView(QWidget):
             except (ValueError, IndexError):
                 pass
 
+    def _on_validate_toggled(self, checked: bool):
+        """Marca/desmarca la incidencia del registro seleccionado como válida."""
+        rid = self._current_row_data.get("_record") if isinstance(
+            self._current_row_data, dict) else None
+        if rid is None:
+            return
+        rid = rid.id
+        validadas = set(self._state.incidencias_validadas)
+        if checked:
+            validadas.add(rid)
+        else:
+            validadas.discard(rid)
+        self._state.incidencias_validadas = validadas
+        self._state.add_log(
+            "SUCCESS",
+            f"Registro {rid} {'validado como correcto' if checked else 'desmarcado'}."
+        )
+        if self._last_result is not None:
+            self._on_analysis_finished(self._last_result)
+
+    @staticmethod
+    def _filter_validated(errors: list, validadas: set) -> list:
+        """Excluye errores de registros cuya incidencia fue validada."""
+        if not validadas:
+            return list(errors)
+        return [e for e in errors if e.record_id not in validadas]
+
     def _on_analysis_finished(self, result):
         self._last_result = result
         self._analyze_btn.setEnabled(True)
@@ -398,13 +527,16 @@ class AnalyzerView(QWidget):
         total = len(self._state.records)
         self._total_label.setText(f"{total} filas totales en el Excel")
 
-        # Actualizar paneles
-        self._panel_folios.set_result(result.folios_result)
-        self._panel_topica.set_result(result.topica_result)
-        self._panel_cronica.set_result(result.cronica_result)
-        self._panel_coverage.set_result(result.coverage_result)
+        # Incidencias validadas no se muestran como error
+        validadas = self._state.incidencias_validadas
 
-        # Combinar todos los errores
+        # Actualizar paneles (sin incidencias validadas)
+        self._panel_folios.set_result(self._filter_result(result.folios_result))
+        self._panel_topica.set_result(self._filter_result(result.topica_result))
+        self._panel_cronica.set_result(self._filter_result(result.cronica_result))
+        self._panel_coverage.set_result(self._filter_result(result.coverage_result))
+
+        # Combinar todos los errores (filtrando los validados)
         all_errors = []
         folios_errors = []
         topica_errors = []
@@ -412,19 +544,29 @@ class AnalyzerView(QWidget):
         coverage_errors = []
 
         if result.folios_result:
-            folios_errors = result.folios_result.errores + result.folios_result.advertencias
+            folios_errors = self._filter_validated(
+                result.folios_result.errores + result.folios_result.advertencias,
+                validadas,
+            )
             all_errors.extend(folios_errors)
 
         if result.topica_result:
-            topica_errors = result.topica_result.advertencias
+            topica_errors = self._filter_validated(
+                result.topica_result.advertencias, validadas
+            )
             all_errors.extend(topica_errors)
 
         if result.cronica_result:
-            cronica_errors = result.cronica_result.errores + result.cronica_result.advertencias
+            cronica_errors = self._filter_validated(
+                result.cronica_result.errores + result.cronica_result.advertencias,
+                validadas,
+            )
             all_errors.extend(cronica_errors)
 
         if result.coverage_result:
-            coverage_errors = result.coverage_result.errores
+            coverage_errors = self._filter_validated(
+                result.coverage_result.errores, validadas
+            )
             all_errors.extend(coverage_errors)
 
         # Llenar pestañas con la lista completa de registros
@@ -448,6 +590,20 @@ class AnalyzerView(QWidget):
         )
 
         self._correct_btn.setEnabled(False)
+        self._validate_btn.setEnabled(False)
+
+    def _filter_result(self, result):
+        """Devuelve una copia del resultado sin incidencias validadas."""
+        if result is None:
+            return None
+        validadas = self._state.incidencias_validadas
+        return AnalysisResult(
+            nombre=result.nombre,
+            total_revisados=result.total_revisados,
+            errores=[e for e in result.errores if e.record_id not in validadas],
+            advertencias=[e for e in result.advertencias if e.record_id not in validadas],
+            info_extra=result.info_extra,
+        )
 
     def apply_theme(self, dark: bool):
         """Reaplica el tema a paneles, pestañas y etiquetas."""
@@ -459,6 +615,7 @@ class AnalyzerView(QWidget):
         )
         self._analyze_btn.setIcon(white_icon(ICON_ANALYZE))
         self._correct_btn.setIcon(theme_icon(ICON_CORRECT, dark))
+        self._validate_btn.setIcon(theme_icon(ICON_CORRECT, dark))
         self._total_label.setStyleSheet(
             f"color: {self._palette['text_secondary']};"
         )
@@ -473,28 +630,18 @@ class AnalyzerView(QWidget):
             tab.apply_theme(dark)
 
     def _on_correct(self):
-        """Abre el modal de corrección para el error seleccionado."""
-        error = getattr(self, '_current_error', None)
-        if error is None:
+        """Abre el modal de edición para el registro/fragmente seleccionado."""
+        tab = getattr(self, '_current_tab', None)
+        field = getattr(tab, '_field', "") if tab else ""
+        field_label = getattr(tab, '_field_label', field) or field
+
+        record = self._current_row_data.get("_record") if isinstance(
+            self._current_row_data, dict) else None
+        if record is None:
             return
 
-        suggestion = None
-        for s in self._state.suggestions:
-            if s.registro_id == error.record_id:
-                suggestion = s
-                break
-
-        if suggestion is None:
-            from src.domain.entities import SugerenciaCorreccion
-            suggestion = SugerenciaCorreccion(
-                id="TEMP", registro_id=error.record_id,
-                tipo_error=error.tipo, descripcion=error.descripcion,
-                valor_actual=error.valor_actual,
-                valor_sugerido=error.valor_esperado,
-                escribano="", folios_original=error.valor_actual,
-                rango_sugerido="", paginas_pdf="", paginas_sugeridas="",
-            )
-
-        modal = CorrectionModal(suggestion, self, dark=self._state.dark_mode)
-        modal.correction_accepted.connect(self._vm.apply_correction)
+        modal = FieldCorrectionModal(
+            record, field, field_label, self, dark=self._state.dark_mode
+        )
+        modal.correction_accepted.connect(self._vm.apply_changes)
         modal.exec()

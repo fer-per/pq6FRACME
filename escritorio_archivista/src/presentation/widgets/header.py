@@ -12,7 +12,7 @@ from PySide6.QtCore import Signal, Qt, QSize
 from PySide6.QtGui import QIcon
 
 from src.presentation.constants import (
-    ICON_MOON, ICON_SUN, ICON_SAVE, ICON_VIEW_FULL, ICON_VIEW_SPLIT,
+    ICON_MOON, ICON_SUN, ICON_SAVE, ICON_LOAD, ICON_VIEW_FULL, ICON_VIEW_SPLIT,
     TOOLBAR_ICON_SIZE,
 )
 from src.presentation.theme.icons import theme_icon
@@ -28,6 +28,7 @@ class Header(QWidget):
     dual_view_toggled = Signal(bool)
     theme_toggled = Signal(bool)
     save_requested = Signal()
+    load_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -69,10 +70,18 @@ class Header(QWidget):
 
         layout.addStretch()
 
+        # Botón cargar configuración
+        self._load_btn = QPushButton(" Cargar")
+        self._load_btn.setProperty("flat", True)
+        self._load_btn.setIcon(theme_icon(ICON_LOAD, self._dark_mode))
+        self._load_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
+        self._load_btn.setToolTip("Cargar configuración guardada")
+        self._load_btn.clicked.connect(self.load_requested.emit)
+        layout.addWidget(self._load_btn)
+
         # Botón guardar
         self._save_btn = QPushButton(" Guardar")
         self._save_btn.setProperty("flat", True)
-        self._save_btn.setFixedHeight(25)
         self._save_btn.setIcon(theme_icon(ICON_SAVE, self._dark_mode))
         self._save_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         self._save_btn.setToolTip("Guardar sesión (Ctrl+S)")
@@ -130,6 +139,7 @@ class Header(QWidget):
         self._dark_mode = dark
         self._update_theme_icon()
         self._save_btn.setIcon(theme_icon(ICON_SAVE, dark))
+        self._load_btn.setIcon(theme_icon(ICON_LOAD, dark))
         self._update_dual_button()
         self._palette = get_palette(dark)
         self.setStyleSheet(
