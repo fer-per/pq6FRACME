@@ -6,15 +6,19 @@ y panel lateral de PDF preview como dock widget.
 """
 import logging
 import os
+import re
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QStackedWidget, QSplitter, QDockWidget, QMessageBox,
+    QInputDialog,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 
-from src.presentation.constants import ViewId, MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT
+from src.presentation.constants import (
+    ViewId, SESIONES_DIR, MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT,
+)
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.stylesheet import generate_stylesheet
 from src.presentation.viewmodels.app_state import AppStateVM
@@ -25,6 +29,27 @@ from src.presentation.widgets.pdf_preview import PDFPreview
 from src.application.container import Container
 
 logger = logging.getLogger(__name__)
+
+_NOMBRE_INVALIDO = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _nombre_valido(nombre: str) -> bool:
+    """True si el nombre de perfil es válido para un archivo Windows."""
+    return bool(nombre.strip()) and not _NOMBRE_INVALIDO.search(nombre)
+
+
+def _ruta_perfil(nombre: str) -> str:
+    """Ruta completa de un perfil de configuración."""
+    return os.path.join(SESIONES_DIR, f"{nombre}.json")
+
+
+def _listar_perfiles() -> list:
+    """Nombres de los perfiles de configuración guardados (orden alfabético)."""
+    if not os.path.isdir(SESIONES_DIR):
+        return []
+    return sorted(
+        f[:-5] for f in os.listdir(SESIONES_DIR) if f.endswith(".json")
+    )
 
 
 class MainWindow(QMainWindow):
@@ -150,7 +175,8 @@ class MainWindow(QMainWindow):
     def _setup_shortcuts(self):
         """Configura atajos de teclado."""
         QShortcut(QKeySequence("Ctrl+S"), self, self._on_save)
-        QShortcut(QKeySequence("Ctrl+N"), self, lambda: self.navigate_to(ViewId.WORKSPACE))
+        QShortcut(QKeySequence("Ctrl+L"), self, self._on_load)
+        QShortcut(QKeySequence("Ctrl+N"), self, self._on_new)
         QShortcut(QKeySequence("Ctrl+1"), self, lambda: self.navigate_to(ViewId.WORKSPACE))
         QShortcut(QKeySequence("Ctrl+2"), self, lambda: self.navigate_to(ViewId.ANALYZER))
         QShortcut(QKeySequence("Ctrl+3"), self, lambda: self.navigate_to(ViewId.PROCESS))
@@ -162,6 +188,7 @@ class MainWindow(QMainWindow):
         self._header.theme_toggled.connect(self._on_theme_toggled)
         self._header.save_requested.connect(self._on_save)
         self._header.load_requested.connect(self._on_load)
+        self._header.new_requested.connect(self._on_new)
 
         # PDF preview signals
         self._pdf_preview.page_changed.connect(self._on_page_changed)
@@ -199,16 +226,49 @@ class MainWindow(QMainWindow):
             apply(dark)
 
     def _on_save(self):
-        """Guarda la configuración actual y confirma al usuario."""
-        try:
-            session_path = "session.json"
-            self._container.gestionar_sesion.guardar(
-                session_path, self._state.to_dict()
+        """Guarda la configuración actual con un nombre de perfil."""
+        nombre, ok = QInputDialog.getText(
+            self, "Guardar configuración",
+            "Nombre de la configuración:",
+            text=self._state.profile_name or "",
+        )
+        if not ok:
+            return
+        nombre = nombre.strip()
+        if not _nombre_valido(nombre):
+            self._state.add_log(
+                "ERR", "Nombre de configuración inválido."
             )
-            self._state.add_log("SUCCESS", "Configuración guardada exitosamente.")
+            QMessageBox.warning(
+                self, "Nombre inválido",
+                "El nombre no puede estar vacío ni contener caracteres "
+                "inválidos: \\ / : * ? \" < > |",
+            )
+            return
+
+        ruta = _ruta_perfil(nombre)
+        if os.path.exists(ruta):
+            respuesta = QMessageBox.question(
+                self, "Sobrescribir",
+                f"Ya existe la configuración '{nombre}'. ¿Deseás "
+                "sobrescribirla?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if respuesta != QMessageBox.StandardButton.Yes:
+                return
+
+        try:
+            self._container.gestionar_sesion.guardar(
+                ruta, self._state.to_dict()
+            )
+            self._state.profile_name = nombre
+            self._header.set_profile_name(nombre)
+            self._state.add_log(
+                "SUCCESS", f"Configuración '{nombre}' guardada exitosamente."
+            )
             QMessageBox.information(
                 self, "Configuración guardada",
-                "La configuración se guardó exitosamente.",
+                f"La configuración '{nombre}' se guardó exitosamente.",
             )
         except Exception as e:
             self._state.add_log("ERR", f"Error al guardar sesión: {e}")
@@ -218,35 +278,76 @@ class MainWindow(QMainWindow):
             )
 
     def _on_load(self):
-        """Carga la configuración guardada a mano y la aplica al estado."""
-        session_path = "session.json"
-        if not os.path.exists(session_path):
+        """Carga una configuración guardada y la aplica al estado."""
+        perfiles = _listar_perfiles()
+        if not perfiles:
             QMessageBox.warning(
-                self, "Sin configuración",
-                "No hay configuraciones guardadas. Usá el botón Guardar primero.",
+                self, "Sin configuraciones",
+                "No hay configuraciones guardadas. Usá Guardar primero.",
             )
             return
+
+        actual = self._state.profile_name or perfiles[0]
+        nombre, ok = QInputDialog.getItem(
+            self, "Cargar configuración",
+            "Configuración a cargar:",
+            perfiles, editable=False,
+            current=perfiles.index(actual) if actual in perfiles else 0,
+        )
+        if not ok:
+            return
+
+        ruta = _ruta_perfil(nombre)
         try:
-            data = self._container.gestionar_sesion.cargar(session_path)
-            if data:
-                self._state.from_dict(data)
-                self._state.add_log("SUCCESS", "Configuración cargada exitosamente.")
-                QMessageBox.information(
-                    self, "Configuración cargada",
-                    "La configuración guardada se cargó correctamente.",
+            data = self._container.gestionar_sesion.cargar(ruta)
+            if not data:
+                self._state.add_log(
+                    "WARN", f"La configuración '{nombre}' está vacía."
                 )
-            else:
-                self._state.add_log("WARN", "La configuración guardada está vacía.")
                 QMessageBox.warning(
                     self, "Sin configuración",
-                    "La configuración guardada está vacía.",
+                    f"La configuración '{nombre}' está vacía.",
                 )
+                return
+            self._state.from_dict(data)
+            self._state.profile_name = nombre
+            self._header.set_profile_name(nombre)
+            self._state.add_log(
+                "SUCCESS", f"Configuración '{nombre}' cargada exitosamente."
+            )
+            QMessageBox.information(
+                self, "Configuración cargada",
+                f"La configuración '{nombre}' se cargó correctamente.",
+            )
         except Exception as e:
             self._state.add_log("ERR", f"Error al cargar configuración: {e}")
             QMessageBox.critical(
                 self, "Error",
                 f"No se pudo cargar la configuración:\n{e}",
             )
+
+    def _on_new(self):
+        """Reinicia el estado para empezar una configuración nueva."""
+        respuesta = QMessageBox.question(
+            self, "Nueva configuración",
+            "¿Empezar una configuración nueva?\n"
+            "Se descartará el estado actual. Las configuraciones guardadas "
+            "no se borran.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if respuesta != QMessageBox.StandardButton.Yes:
+            return
+        self._state.reset()
+        self._header.set_profile_name("")
+        self.navigate_to(ViewId.WORKSPACE)
+        self._state.add_log(
+            "INFO", "Nueva configuración iniciada."
+        )
+        QMessageBox.information(
+            self, "Nueva configuración",
+            "Estado reiniciado. Podés comenzar a cargar un nuevo inventario.\n"
+            "Usá Guardar para crear otra configuración.",
+        )
 
     def _on_page_changed(self, page: int):
         """Actualiza la página del PDF en el estado (el preview maneja el render)."""

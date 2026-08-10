@@ -16,6 +16,7 @@ from src.domain.entities import (
     SystemLog,
 )
 from src.domain.services.folio_mapper import mapper_from_config
+from src.presentation.constants import DEFAULT_OUTPUT_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,8 @@ class AppStateVM(QObject):
         # ─── Rutas de archivos ───────────────────────────────
         self._excel_path: Optional[str] = None
         self._pdf_path: Optional[str] = None
-        self._output_dir: Optional[str] = None
+        self._output_dir: str = DEFAULT_OUTPUT_DIR
+        self._profile_name: Optional[str] = None
 
         # ─── Datos del inventario ────────────────────────────
         self._records: List[InventoryRecord] = []
@@ -105,6 +107,15 @@ class AppStateVM(QObject):
     @output_dir.setter
     def output_dir(self, value: Optional[str]):
         self._output_dir = value
+
+    @property
+    def profile_name(self) -> Optional[str]:
+        return self._profile_name
+
+    @profile_name.setter
+    def profile_name(self, value: Optional[str]):
+        self._profile_name = value
+        self.session_changed.emit()
 
     @property
     def records(self) -> List[InventoryRecord]:
@@ -351,7 +362,7 @@ class AppStateVM(QObject):
         """Restaura el estado desde un diccionario de sesión."""
         self._excel_path = data.get("excel_path")
         self._pdf_path = data.get("pdf_path")
-        self._output_dir = data.get("output_dir")
+        self._output_dir = data.get("output_dir") or DEFAULT_OUTPUT_DIR
         self._fila_datos_inicio = data.get("fila_datos_inicio", 0)
         self._fila_inicio = data.get("fila_inicio", 0)
         self._fila_fin = data.get("fila_fin", 0)
@@ -377,6 +388,46 @@ class AppStateVM(QObject):
         self.records_changed.emit()
         self.exclusions_changed.emit()
         self.suggestions_changed.emit()
+        self.pdf_changed.emit()
+        self.config_changed.emit()
+        self.session_changed.emit()
+
+    def reset(self):
+        """Reinicia el estado a los valores por defecto (nueva configuración).
+
+        No toca preferencias de UI (tema y vista partida/completa) ni los
+        perfiles guardados en disco.
+        """
+        self._excel_path = None
+        self._pdf_path = None
+        self._output_dir = DEFAULT_OUTPUT_DIR
+        self._profile_name = None
+        self._records = []
+        self._exclusions = []
+        self._suggestions = []
+        self._logs = []
+        self._fila_datos_inicio = 0
+        self._fila_datos_auto = True
+        self._fila_inicio = 0
+        self._fila_fin = 0
+        self._folio_inicio = ""
+        self._pag_pdf_inicio = 0
+        self._segmentos = []
+        self._overrides = {}
+        self._page_map = {}
+        self._active_pages = []
+        self._incidencias_validadas = set()
+        self._pdf_current_page = 1
+        self._pdf_total_pages = 0
+        self._pdf_zoom = 100
+        self._acervo_num = "7"
+        self._siglo = ""
+
+        # Emitir todas las señales
+        self.records_changed.emit()
+        self.exclusions_changed.emit()
+        self.suggestions_changed.emit()
+        self.logs_changed.emit()
         self.pdf_changed.emit()
         self.config_changed.emit()
         self.session_changed.emit()

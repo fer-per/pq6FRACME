@@ -74,13 +74,14 @@ class TestAnalizarDatosUseCase:
     def test_records_con_error_marcados_revisar(self):
         records = [
             _rec(id="#0001", folios="001r-002v"),
-            _rec(id="#0002", fila=11, folios="001r-003v"),  # Repetido
+            _rec(id="#0002", fila=11, folios="abc"),  # Formato inválido (fatal)
         ]
         uc = AnalizarDatosUseCase()
         result = uc.ejecutar(records)
 
         revisar = [r for r in result.records if r.estado == "REVISAR"]
-        assert len(revisar) >= 1
+        assert len(revisar) == 1
+        assert revisar[0].id == "#0002"
 
 
 # ═══════════════════════════════════════════════════════════════

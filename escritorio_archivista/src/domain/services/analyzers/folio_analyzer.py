@@ -75,25 +75,41 @@ def analizar_folios(
         desde_int = folio_to_int(desde_num, desde_cara)
         hasta_int = folio_to_int(hasta_num, hasta_cara)
 
-        # 2. REPETIDO
+        # Los registros que comparten hoja (comparte_hoja=True) arrancan en
+        # el mismo folio donde terminó el anterior: REPETIDO, SOLAPAMIENTO y
+        # SALTO son esperados en ese caso y no constituyen error fatal.
+        comparte_hoja = bool(getattr(record, "comparte_hoja", False))
+
+        # 2. REPETIDO — en protocolos escaneados la numeración de folios
+        # puede repetirse (mismo número, distinto contenido): es una
+        # advertencia, no un error fatal.
         if desde_int in seen_starts:
-            errores.append(AnalysisError(
-                record_id=record.id,
-                fila=record.fila,
-                tipo="REPETIDO",
-                descripcion=(
-                    f"El folio de inicio '{record.folios}' ya fue usado "
-                    f"por el registro {seen_starts[desde_int]}."
-                ),
-                valor_actual=record.folios,
-                valor_esperado="Folio único",
-                fatal=True,
-            ))
+            if not comparte_hoja:
+                advertencias.append(AnalysisError(
+                    record_id=record.id,
+                    fila=record.fila,
+                    tipo="REPETIDO",
+                    descripcion=(
+                        f"El folio de inicio '{record.folios}' ya fue usado "
+                        f"por el registro {seen_starts[desde_int]}."
+                    ),
+                    valor_actual=record.folios,
+                    valor_esperado="Folio único",
+                    fatal=False,
+                ))
+            # El registro ocupa folios reales: los siguientes se validan
+            # contra este rango.
+            prev_hasta_int = hasta_int
+            expected_next_int = hasta_int + 1
             continue
         seen_starts[desde_int] = record.id
 
         # 3. SOLAPAMIENTO
-        if prev_hasta_int is not None and desde_int <= prev_hasta_int:
+        if (
+            prev_hasta_int is not None
+            and desde_int <= prev_hasta_int
+            and not comparte_hoja
+        ):
             errores.append(AnalysisError(
                 record_id=record.id,
                 fila=record.fila,
@@ -109,7 +125,11 @@ def analizar_folios(
             continue
 
         # 4. SALTO
-        if expected_next_int is not None and desde_int != expected_next_int:
+        if (
+            expected_next_int is not None
+            and desde_int != expected_next_int
+            and not comparte_hoja
+        ):
             if not _salto_aprobado(expected_next_int, desde_int, exclusions):
                 advertencias.append(AnalysisError(
                     record_id=record.id,

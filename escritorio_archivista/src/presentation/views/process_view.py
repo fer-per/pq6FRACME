@@ -7,7 +7,7 @@ y tabla de foliación mapeada.
 import logging
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QProgressBar, QGroupBox, QFileDialog,
 )
 from PySide6.QtCore import Qt, QSize, QTimer, QUrl
@@ -71,11 +71,10 @@ class ProcessView(QWidget):
         output_layout.addWidget(folder_icon)
 
         output_layout.addWidget(QLabel("Directorio de salida:"))
-        self._output_label = QLabel(self._state.output_dir or "No seleccionado")
+        self._output_label = QLineEdit(self._state.output_dir or "No seleccionado")
+        self._output_label.setReadOnly(True)
         self._output_label.setFont(get_font("body_sm"))
-        self._output_label.setStyleSheet(
-            f"color: {self._palette['text_secondary']};"
-        )
+        self._output_label.setToolTip(self._state.output_dir or "")
         output_layout.addWidget(self._output_label, stretch=1)
 
         self._select_dir_btn = QPushButton(" Seleccionar")
@@ -157,8 +156,14 @@ class ProcessView(QWidget):
         path = QFileDialog.getExistingDirectory(self, "Directorio de salida")
         if path:
             self._vm.set_output_dir(path)
-            self._output_label.setText(path)
+            self._set_output_text(path)
             self._open_dir_btn.setEnabled(True)
+
+    def _set_output_text(self, path: str):
+        """Muestra la ruta completa y la lleva al final para ver el nombre."""
+        self._output_label.setText(path)
+        self._output_label.setToolTip(path)
+        self._output_label.setCursorPosition(len(path))
 
     def _on_open_dir(self):
         path = self._state.output_dir
@@ -218,9 +223,6 @@ class ProcessView(QWidget):
         self._select_dir_btn.setIcon(theme_icon(ICON_SELECT, dark))
         self._open_dir_btn.setIcon(theme_icon(ICON_FOLDER, dark))
         self._fragment_btn.setIcon(white_icon(ICON_PROCESS))
-        self._output_label.setStyleSheet(
-            f"color: {self._palette['text_secondary']};"
-        )
         self._status_label.setStyleSheet(
             f"color: {self._palette['text_secondary']};"
         )

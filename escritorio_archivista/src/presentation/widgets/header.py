@@ -29,6 +29,7 @@ class Header(QWidget):
     theme_toggled = Signal(bool)
     save_requested = Signal()
     load_requested = Signal()
+    new_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -68,14 +69,30 @@ class Header(QWidget):
         self._subtitle_label = subtitle
         layout.addWidget(subtitle)
 
+        # Nombre del perfil activo (oculto si no hay configuración cargada)
+        self._profile_label = QLabel("")
+        self._profile_label.setFont(get_font("body_sm_bold"))
+        self._profile_label.setStyleSheet(
+            f"color: {self._palette['primary']}; background: transparent;"
+        )
+        self._profile_label.hide()
+        layout.addWidget(self._profile_label)
+
         layout.addStretch()
+
+        # Botón nueva configuración
+        self._new_btn = QPushButton(" + Nueva")
+        self._new_btn.setProperty("flat", True)
+        self._new_btn.setToolTip("Empezar una configuración nueva (Ctrl+N)")
+        self._new_btn.clicked.connect(self.new_requested.emit)
+        layout.addWidget(self._new_btn)
 
         # Botón cargar configuración
         self._load_btn = QPushButton(" Cargar")
         self._load_btn.setProperty("flat", True)
         self._load_btn.setIcon(theme_icon(ICON_LOAD, self._dark_mode))
         self._load_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
-        self._load_btn.setToolTip("Cargar configuración guardada")
+        self._load_btn.setToolTip("Cargar configuración guardada (Ctrl+L)")
         self._load_btn.clicked.connect(self.load_requested.emit)
         layout.addWidget(self._load_btn)
 
@@ -134,6 +151,17 @@ class Header(QWidget):
         icon = ICON_MOON if self._dark_mode else ICON_SUN
         self._theme_btn.setIcon(QIcon(icon))
 
+    def set_profile_name(self, name: str = ""):
+        """Muestra el nombre del perfil de configuración activo."""
+        if name:
+            self._profile_label.setText(f"\u25CF {name}")
+            self._profile_label.show()
+            self._profile_label.setToolTip(
+                f"Configuración activa: {name}"
+            )
+        else:
+            self._profile_label.hide()
+
     def apply_theme(self, dark: bool):
         """Reaplica los estilos dependientes del tema."""
         self._dark_mode = dark
@@ -154,4 +182,7 @@ class Header(QWidget):
         )
         self._subtitle_label.setStyleSheet(
             f"color: {self._palette['text_secondary']}; background: transparent;"
+        )
+        self._profile_label.setStyleSheet(
+            f"color: {self._palette['primary']}; background: transparent;"
         )

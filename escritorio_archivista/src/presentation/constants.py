@@ -30,8 +30,17 @@ MIN_WINDOW_HEIGHT = 750
 ANIMATION_DURATION_MS = 200
 
 # Recursos
-RESOURCES_DIR = Path(__file__).resolve().parents[2] / "resources"
+APP_ROOT_DIR = Path(__file__).resolve().parents[2]
+RESOURCES_DIR = APP_ROOT_DIR / "resources"
 ICONS_DIR = RESOURCES_DIR / "icons"
+
+# Directorio de salida predeterminado para los fragmentos PDF.
+# Se muestra en el front y cada corrida de fragmentación crea un nombre
+# numerado: output, output (1), output (2), ...
+DEFAULT_OUTPUT_DIR = str(APP_ROOT_DIR / "output")
+
+# Directorio donde se guardan las configuraciones (perfiles) con nombre.
+SESIONES_DIR = str(APP_ROOT_DIR / "sesiones")
 
 # Íconos del toggle de tema (botón del header)
 THEME_ICONS_DIR = ICONS_DIR / "theme"

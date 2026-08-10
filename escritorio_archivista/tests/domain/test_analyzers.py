@@ -48,14 +48,15 @@ class TestFolioAnalyzer:
         assert result.errores[0].tipo == "FORMATO"
         assert result.errores[0].fatal is True
 
-    def test_folio_repetido(self):
+    def test_folio_repetido_es_advertencia(self):
         records = [
             _rec(id="#0001", folios="001r-002v"),
             _rec(id="#0002", fila=11, folios="001r-003v"),
         ]
         result = analizar_folios(records)
-        assert len(result.errores) == 1
-        assert result.errores[0].tipo == "REPETIDO"
+        assert len(result.advertencias) == 1
+        assert result.advertencias[0].tipo == "REPETIDO"
+        assert result.advertencias[0].fatal is False
 
     def test_solapamiento(self):
         records = [
@@ -109,8 +110,8 @@ class TestFolioAnalyzer:
             _rec(id="#0002", fila=11, folios="001r-003v", protocolo="2"),
         ]
         result = analizar_folios(records)
-        assert len(result.errores) == 1
-        assert result.errores[0].tipo == "REPETIDO"
+        assert len(result.advertencias) == 1
+        assert result.advertencias[0].tipo == "REPETIDO"
 
     def test_cambio_de_protocolo_reinicia_secuencia_esperada(self):
         records = [
@@ -120,6 +121,57 @@ class TestFolioAnalyzer:
         result = analizar_folios(records)
         # El protocolo 2 reinicia: 117r < 117v no debe generar SOLAPAMIENTO
         assert result.ok
+
+    def test_repetido_ignorado_si_comparte_hoja(self):
+        records = [
+            _rec(id="#0001", folios="001r-002v"),
+            _rec(id="#0002", fila=11, folios="001r-003v", comparte_hoja=True),
+        ]
+        result = analizar_folios(records)
+        assert result.ok
+        assert len(result.errores) == 0
+        assert len(result.advertencias) == 0
+
+    def test_solapamiento_ignorado_si_comparte_hoja(self):
+        records = [
+            _rec(id="#0001", folios="001r-005v"),
+            _rec(id="#0002", fila=11, folios="003r-006v", comparte_hoja=True),
+        ]
+        result = analizar_folios(records)
+        assert result.ok
+        assert len(result.errores) == 0
+        assert len(result.advertencias) == 0
+
+    def test_salto_ignorado_si_comparte_hoja(self):
+        records = [
+            _rec(id="#0001", folios="001r-002v"),
+            _rec(id="#0002", fila=11, folios="001r-002v", comparte_hoja=True),
+        ]
+        result = analizar_folios(records)
+        assert result.ok
+        assert len(result.errores) == 0
+        assert len(result.advertencias) == 0
+
+    def test_repetido_sin_comparte_hoja_es_advertencia(self):
+        records = [
+            _rec(id="#0001", folios="001r-002v"),
+            _rec(id="#0002", fila=11, folios="001r-003v"),
+        ]
+        result = analizar_folios(records)
+        assert len(result.advertencias) == 1
+        assert result.advertencias[0].tipo == "REPETIDO"
+        assert result.advertencias[0].fatal is False
+
+    def test_secuencia_despues_de_comparte_hoja_sigue_siendo_correcta(self):
+        records = [
+            _rec(id="#0001", folios="001r-002v"),
+            _rec(id="#0002", fila=11, folios="001r-002v", comparte_hoja=True),
+            _rec(id="#0003", fila=12, folios="003r-004v"),
+        ]
+        result = analizar_folios(records)
+        assert result.ok
+        assert len(result.errores) == 0
+        assert len(result.advertencias) == 0
 
 
 # ═══════════════════════════════════════════════════════════════

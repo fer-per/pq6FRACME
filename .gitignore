@@ -8,6 +8,7 @@ docs/
 
 # Sesion local de la app
 **/session.json
+**/sesiones/
 
 # Salida de fragmentacion
 **/output/

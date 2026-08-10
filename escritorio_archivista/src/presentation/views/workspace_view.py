@@ -325,9 +325,11 @@ class WorkspaceView(QWidget):
         # Tabla de datos — sin columna ID, usa Fila Excel
         self._table = DataTable(
             columns=["Fila", "Registro", "Escribano", "Protocolo",
-                      "Folios", "Pág. PDF", "Título", "Estado"],
+                      "Folios", "Pág. PDF", "Fecha Inicio", "Título",
+                      "Interesado 1", "Interesado 2", "Estado"],
             field_map=["fila", "registro", "escribano", "protocolo",
-                        "folios", "pg_pdf", "titulo", "estado"],
+                        "folios", "pg_pdf", "fecha_inicio", "titulo",
+                        "interesado1", "interesado2", "estado"],
         )
         step3_layout.addWidget(self._table)
 
