@@ -45,6 +45,12 @@ def generar_sugerencias(
     sug_counter = 0
 
     for error in errors:
+        # SIN_FOLIO es un aviso informativo: el registro carece de foliación
+        # por decisión del inventario y no hay folio que corregir (las páginas
+        # PDF se indican manualmente). No genera sugerencia de corrección.
+        if error.tipo == "SIN_FOLIO":
+            continue
+
         record = records_by_id.get(error.record_id)
         if record is None:
             continue

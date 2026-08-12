@@ -101,6 +101,58 @@ def generate_stylesheet(dark: bool = False) -> str:
         color: {p['on_primary']};
     }}
 
+    /* Botón "Corregir Seleccionado" (ámbar: corregir/editar) */
+    QPushButton[role="correct"] {{
+        background-color: {p['correct_bg']};
+        color: {p['correct_fg']};
+        border: none;
+    }}
+    QPushButton[role="correct"]:hover {{
+        background-color: {p['correct_hover']};
+        color: {p['correct_fg']};
+    }}
+    QPushButton[role="correct"]:pressed {{
+        background-color: {p['correct_pressed']};
+        color: {p['correct_fg']};
+        padding-top: 9px;
+    }}
+    QPushButton[role="correct"]:disabled {{
+        background-color: {p['surface_high']};
+        color: {p['text_disabled']};
+        border: 1px solid {p['outline_variant']};
+    }}
+
+    /* Botón "Validar como Correcto" (verde: validar/confirmar) */
+    QPushButton[role="validate"] {{
+        background-color: transparent;
+        color: {p['validate_color']};
+        border: 2px solid {p['validate_color']};
+    }}
+    QPushButton[role="validate"]:hover {{
+        background-color: {p['validate_bg_soft']};
+    }}
+    QPushButton[role="validate"]:checked {{
+        background-color: {p['validate_bg']};
+        color: {p['validate_fg']};
+        border: 2px solid {p['validate_bg']};
+    }}
+    QPushButton[role="validate"]:checked:hover {{
+        background-color: {p['validate_hover']};
+        border-color: {p['validate_hover']};
+    }}
+    QPushButton[role="validate"]:checked:pressed {{
+        background-color: {p['validate_pressed']};
+        border-color: {p['validate_pressed']};
+    }}
+    QPushButton[role="validate"]:pressed {{
+        padding-top: 9px;
+    }}
+    QPushButton[role="validate"]:disabled {{
+        background-color: {p['surface_high']};
+        color: {p['text_disabled']};
+        border: 1px solid {p['outline_variant']};
+    }}
+
     /* Sidebar */
     QPushButton[sidebar="true"] {{
         background-color: transparent;

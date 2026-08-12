@@ -13,6 +13,7 @@ from src.domain.entities import InventoryRecord, ExclusionRule
 from src.domain.ports.pdf_port import PDFServicePort
 from src.domain.ports.hierarchy_port import HierarchyBuilderPort
 from src.domain.services.folio_mapper import mapper_from_config
+from src.domain.services.folio_parser import es_sin_folio
 from src.application.dto import ResultadoFragmentacion, InfoArchivo
 
 logger = logging.getLogger(__name__)
@@ -104,6 +105,28 @@ class FragmentarPDFUseCase:
                         mapper.folio_str_to_pdf_pages(
                             record.folios, share_last=record.comparte_hoja
                         )
+                    continue
+
+                # Registros sin foliación (S/F): requieren rango manual,
+                # no resuelven a páginas por sí mismos.
+                if (
+                    not record.pg_pdf_manual.strip()
+                    and es_sin_folio(record.folios)
+                ):
+                    pendientes.append({
+                        "ID": record.id,
+                        "Fila": record.fila,
+                        "Registro": record.registro,
+                        "Escribano": record.escribano,
+                        "Folios": record.folios,
+                        "Motivo": "Sin foliación (S/F) — asignar rango de páginas PDF manualmente",
+                    })
+                    logger.warning(
+                        "Omitido %s: sin foliación (S/F), sin rango manual.",
+                        record.id,
+                    )
+                    # El registro no ocupa páginas del PDF: los siguientes
+                    # conservan su mapeo folio → página.
                     continue
 
                 # Calcular páginas (respetando comparte_hoja o rango manual)

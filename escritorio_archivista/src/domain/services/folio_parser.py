@@ -11,6 +11,38 @@ from typing import Optional, Tuple
 
 FolioTuple = Tuple[int, str, int, str]  # (desde_num, desde_cara, hasta_num, hasta_cara)
 
+# Marcas que indican "sin foliación" en la columna de folios. Son una decisión
+# intencional de quien armó el inventario: no tienen formato de folio y no
+# deben tratarse como error de formato.
+SIN_FOLIO_MARKERS = (
+    "s/f", "s. f", "s.f", "s f", "sf", "sin folio", "sin folios",
+    "s/fol", "s/folios",
+)
+
+
+def es_sin_folio(folio_str: str) -> bool:
+    """
+    Indica si el valor de la columna de folios marca "sin foliación" (S/F).
+
+    Reconoce variantes (mayúsculas/espacios/puntuación): ``S/F``, ``S.F.``,
+    ``sf``, ``SIN FOLIO``, etc.
+
+    Args:
+        folio_str: Valor de la columna de folios.
+
+    Returns:
+        True si representa un "sin folio" (no es un folio real).
+    """
+    if not folio_str or not isinstance(folio_str, str):
+        return False
+    normalizado = _normalizar_sin_folio(folio_str)
+    return any(_normalizar_sin_folio(m) == normalizado for m in SIN_FOLIO_MARKERS)
+
+
+def _normalizar_sin_folio(texto: str) -> str:
+    """Minúsculas, sin espacios ni puntos, para comparar variantes de S/F."""
+    return ''.join(c for c in texto.strip().lower() if c not in ' .')
+
 
 def parse_folios(folio_str: str) -> Optional[FolioTuple]:
     """

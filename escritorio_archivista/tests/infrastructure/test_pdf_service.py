@@ -188,6 +188,78 @@ class TestFragmentarPDFUseCase:
         ]
         assert extraido_c == [[9]]
 
+    def test_sin_folio_sin_rango_manual_va_a_pendientes_sin_desplazar(self):
+        """Un registro S/F sin páginas manuales se omite y no desalinea los demás."""
+        pdf_service = MagicMock()
+        hierarchy = MagicMock()
+        uc = FragmentarPDFUseCase(pdf_service, hierarchy)
+
+        tmp_dir = tempfile.mkdtemp()
+        hierarchy.construir_ruta.side_effect = lambda r, o, a: os.path.join(
+            tmp_dir, "out", f"{r.id}.pdf"
+        )
+
+        records = [
+            InventoryRecord(
+                id="#0001", fila=10, registro="001", escribano="García",
+                protocolo="1", folios="001r-002v", pg_pdf="1-4",
+                titulo="A",
+            ),
+            InventoryRecord(
+                id="#0002", fila=11, registro="002", escribano="García",
+                protocolo="1", folios="S/F", pg_pdf="",
+                titulo="B",
+            ),
+        ]
+
+        result = uc.ejecutar(
+            records=records,
+            pdf_path="maestro.pdf",
+            output_dir=tmp_dir,
+            acervo_num="7",
+            pag_pdf_inicio=1,
+        )
+
+        assert result.total_exitos == 1
+        assert result.total_fallos == 0
+        assert result.metadata["pendientes"] == 1
+
+        # No se intentó extraer nada para el S/F
+        for args in pdf_service.extraer_paginas.call_args_list:
+            assert not args[0][2].endswith("#0002.pdf")
+
+    def test_sin_folio_con_rango_manual_se_fragmenta(self):
+        """Un registro S/F con páginas PDF manuales se fragmenta normalmente."""
+        pdf_service = MagicMock()
+        hierarchy = MagicMock()
+        uc = FragmentarPDFUseCase(pdf_service, hierarchy)
+
+        tmp_dir = tempfile.mkdtemp()
+        dest = os.path.join(tmp_dir, "out", "acervo", "registro.pdf")
+        hierarchy.construir_ruta.return_value = dest
+
+        records = [
+            InventoryRecord(
+                id="#0001", fila=10, registro="001", escribano="García",
+                protocolo="1", folios="S/F", pg_pdf="3-4",
+                titulo="B", pg_pdf_manual="3-4",
+            ),
+        ]
+
+        result = uc.ejecutar(
+            records=records,
+            pdf_path="maestro.pdf",
+            output_dir=tmp_dir,
+            acervo_num="7",
+            pag_pdf_inicio=1,
+        )
+
+        assert result.total_exitos == 1
+        pdf_service.extraer_paginas.assert_called_once_with(
+            pdf_service.abrir.return_value, [3, 4], dest
+        )
+        assert records[0].estado == "FRAGMENTADO"
+
     def test_cierra_lector_aun_con_error_en_extraccion(self):
         pdf_service = MagicMock()
         hierarchy = MagicMock()

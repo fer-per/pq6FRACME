@@ -34,6 +34,18 @@ LIGHT_PALETTE = {
     "info":                "#1e3a5f",
     "info_bg":             "#dbeafe",
 
+    # Botones de acción del analizador
+    "correct_bg":          "#b45309",   # Ámbar: corregir/editar
+    "correct_hover":       "#9a4707",
+    "correct_pressed":     "#7e3a06",
+    "correct_fg":          "#ffffff",
+    "validate_color":      "#1e7d34",   # Verde: validar/confirmar
+    "validate_bg":         "#1e7d34",
+    "validate_hover":      "#176a2b",
+    "validate_pressed":    "#144f21",
+    "validate_fg":         "#ffffff",
+    "validate_bg_soft":    "#d1fae5",
+
     # Consola de logs
     "console_info":        "#a8c4d4",
     "console_warn":        "#f5a742",
@@ -78,6 +90,18 @@ DARK_PALETTE = {
     "warning_bg":          "#3a2a1a",
     "info":                "#60a5fa",
     "info_bg":             "#1a2a3a",
+
+    # Botones de acción del analizador
+    "correct_bg":          "#fbbf24",   # Ámbar: corregir/editar
+    "correct_hover":       "#f2b40c",
+    "correct_pressed":     "#d99a08",
+    "correct_fg":          "#3a2a05",
+    "validate_color":      "#4ade80",   # Verde: validar/confirmar
+    "validate_bg":         "#4ade80",
+    "validate_hover":      "#3dd177",
+    "validate_pressed":    "#2eb362",
+    "validate_fg":         "#0b3320",
+    "validate_bg_soft":    "#1a3a2a",
 
     # Consola
     "console_info":        "#7ec8e3",

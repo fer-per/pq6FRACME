@@ -16,7 +16,7 @@ from src.domain.entities import (
     InventoryRecord,
     ExclusionRule,
 )
-from src.domain.services.folio_parser import parse_folios, folio_to_int
+from src.domain.services.folio_parser import parse_folios, folio_to_int, es_sin_folio
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ def analizar_folios(
     prev_hasta_int: Optional[int] = None
     expected_next_int: Optional[int] = None
     prev_protocolo: Optional[str] = None
+    last_was_sf = False
     validados = 0
     revisados = 0
 
@@ -54,11 +55,32 @@ def analizar_folios(
             seen_starts = {}
             prev_hasta_int = None
             expected_next_int = None
+            last_was_sf = False
         prev_protocolo = record.protocolo
 
         parsed = parse_folios(record.folios)
 
-        # 1. FORMATO
+        # 1. SIN_FOLIO — el folio está marcado como "S/F" (sin foliación): es
+        # una decisión intencional del inventario, no un error de formato.
+        # No puede validarse la secuencia alrededor de este registro, por lo
+        # que el salto de un registro precedente queda justificado.
+        if parsed is None and es_sin_folio(record.folios):
+            advertencias.append(AnalysisError(
+                record_id=record.id,
+                fila=record.fila,
+                tipo="SIN_FOLIO",
+                descripcion=(
+                    "El registro no tiene foliación (S/F). "
+                    "Indique manualmente su rango de páginas PDF."
+                ),
+                valor_actual=record.folios,
+                valor_esperado="",
+                fatal=False,
+            ))
+            last_was_sf = True
+            continue
+
+        # 2. FORMATO
         if parsed is None:
             errores.append(AnalysisError(
                 record_id=record.id,
@@ -130,7 +152,7 @@ def analizar_folios(
             and desde_int != expected_next_int
             and not comparte_hoja
         ):
-            if not _salto_aprobado(expected_next_int, desde_int, exclusions):
+            if not last_was_sf and not _salto_aprobado(expected_next_int, desde_int, exclusions):
                 advertencias.append(AnalysisError(
                     record_id=record.id,
                     fila=record.fila,
@@ -147,6 +169,7 @@ def analizar_folios(
         # Actualizar tracking
         prev_hasta_int = hasta_int
         expected_next_int = hasta_int + 1
+        last_was_sf = False
 
         if record.estado == "VALIDADO":
             validados += 1

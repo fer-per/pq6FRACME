@@ -10,6 +10,7 @@ from src.domain.services.folio_parser import (
     int_to_folio,
     format_folio,
     calculate_suggested_range,
+    es_sin_folio,
 )
 from src.domain.entities import InventoryRecord
 
@@ -130,6 +131,24 @@ class TestFormatFolio:
 
     def test_tres_digitos(self):
         assert format_folio(42, 'r') == "042r"
+
+
+# ─── es_sin_folio ────────────────────────────────────────────
+
+class TestEsSinFolio:
+    """Tests para es_sin_folio (marca de "sin foliación")."""
+
+    @pytest.mark.parametrize("valor", [
+        "S/F", "s/f", "S.F.", "s.f", "S F", "sf", "SIN FOLIO", "s/fol",
+    ])
+    def test_reconoce_variantes(self, valor):
+        assert es_sin_folio(valor)
+
+    @pytest.mark.parametrize("valor", [
+        "471r-471v", "abc", "", None, "001r",
+    ])
+    def test_no_son_sin_folio(self, valor):
+        assert not es_sin_folio(valor)
 
 
 # ─── calculate_suggested_range ───────────────────────────────

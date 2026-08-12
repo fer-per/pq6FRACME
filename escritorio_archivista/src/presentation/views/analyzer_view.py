@@ -179,6 +179,7 @@ _CRONICA_COLUMNS = [
 # Mapea el tipo de error al campo del registro que debe resaltarse en rojo.
 _ERROR_FIELD = {
     "FORMATO": ("folios",),
+    "SIN_FOLIO": ("folios",),
     "REPETIDO": ("folios",),
     "SOLAPAMIENTO": ("folios",),
     "SALTO": ("folios",),
@@ -458,6 +459,7 @@ class AnalyzerView(QWidget):
         btn_layout.addStretch()
 
         self._correct_btn = QPushButton(" Corregir Seleccionado")
+        self._correct_btn.setProperty("role", "correct")
         self._correct_btn.setEnabled(False)
         self._correct_btn.setIcon(theme_icon(ICON_CORRECT, False))
         self._correct_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
@@ -465,6 +467,7 @@ class AnalyzerView(QWidget):
         btn_layout.addWidget(self._correct_btn)
 
         self._validate_btn = QPushButton(" Validar como Correcto")
+        self._validate_btn.setProperty("role", "validate")
         self._validate_btn.setEnabled(False)
         self._validate_btn.setCheckable(True)
         self._validate_btn.setIcon(theme_icon(ICON_CORRECT, False))
@@ -472,6 +475,10 @@ class AnalyzerView(QWidget):
         self._validate_btn.clicked.connect(self._on_validate_toggled)
         btn_layout.addWidget(self._validate_btn)
         layout.addLayout(btn_layout)
+
+        for btn in (self._correct_btn, self._validate_btn):
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
 
     def _connect_signals(self):
         self._vm.analysis_finished.connect(self._on_analysis_finished)

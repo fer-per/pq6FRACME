@@ -83,6 +83,25 @@ class TestAnalizarDatosUseCase:
         assert len(revisar) == 1
         assert revisar[0].id == "#0002"
 
+    def test_sin_folio_no_marca_revisar_ni_genera_sugerencia(self):
+        records = [
+            _rec(id="#0001", folios="001r-002v"),
+            _rec(id="#0002", fila=11, folios="003r-004r"),
+            _rec(id="#0003", fila=12, folios="S/F"),
+            _rec(id="#0004", fila=13, folios="004v-006r"),
+        ]
+        uc = AnalizarDatosUseCase()
+        result = uc.ejecutar(records)
+
+        revisar = [r for r in result.records if r.estado == "REVISAR"]
+        assert revisar == []
+
+        tipos = [e.tipo for e in result.folios_result.advertencias]
+        assert tipos == ["SIN_FOLIO"]
+        assert tipos.count("SALTO") == 0
+
+        assert all(s.tipo_error != "SIN_FOLIO" for s in result.suggestions)
+
 
 # ═══════════════════════════════════════════════════════════════
 # GESTIONAR EXCLUSIONES USE CASE

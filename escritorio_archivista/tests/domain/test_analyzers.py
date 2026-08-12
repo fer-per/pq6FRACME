@@ -173,6 +173,52 @@ class TestFolioAnalyzer:
         assert len(result.errores) == 0
         assert len(result.advertencias) == 0
 
+    def test_sin_folio_es_advertencia_informativa(self):
+        records = [
+            _rec(id="#0001", folios="001r-002v"),
+            _rec(id="#0002", fila=11, folios="S/F"),
+        ]
+        result = analizar_folios(records)
+        assert len(result.errores) == 0
+        assert len(result.advertencias) == 1
+        assert result.advertencias[0].tipo == "SIN_FOLIO"
+        assert result.advertencias[0].fatal is False
+
+    def test_sin_folio_no_genera_salto_en_registro_siguiente(self):
+        records = [
+            _rec(id="#0001", folios="471r-471v"),
+            _rec(id="#0002", fila=11, folios="472r-472v"),
+            _rec(id="#0003", fila=12, folios="S/F"),
+            _rec(id="#0004", fila=13, folios="474r-474v"),
+        ]
+        result = analizar_folios(records)
+        assert len(result.errores) == 0
+        tipos = [e.tipo for e in result.advertencias]
+        assert tipos == ["SIN_FOLIO"]
+
+    def test_sin_folio_consecutivos_sin_salto(self):
+        records = [
+            _rec(id="#0001", folios="001r-002v"),
+            _rec(id="#0002", fila=11, folios="S/F"),
+            _rec(id="#0003", fila=12, folios="S/F"),
+            _rec(id="#0004", fila=13, folios="003r-004v"),
+        ]
+        result = analizar_folios(records)
+        assert len(result.errores) == 0
+        tipos = [e.tipo for e in result.advertencias]
+        assert tipos == ["SIN_FOLIO", "SIN_FOLIO"]
+
+    def test_sin_folio_no_contamina_protocolo_siguiente(self):
+        records = [
+            _rec(id="#0001", folios="001r-002v", protocolo="1"),
+            _rec(id="#0002", fila=11, folios="S/F", protocolo="1"),
+            _rec(id="#0003", fila=12, folios="001r-002v", protocolo="2"),
+        ]
+        result = analizar_folios(records)
+        assert len(result.errores) == 0
+        tipos = [e.tipo for e in result.advertencias]
+        assert tipos == ["SIN_FOLIO"]
+
 
 # ═══════════════════════════════════════════════════════════════
 # TOPICA ANALYZER
