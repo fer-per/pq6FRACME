@@ -24,6 +24,7 @@ class InventoryRecord:
     fecha_fin: str = ""            # Data crónica 2
     interesado1: str = ""          # Primer interesado
     interesado2: str = ""          # Segundo interesado
+    interesado3: str = ""          # Tercer interesado
     data_topica: str = ""          # Lugar del acto jurídico
     comparte_hoja: bool = False    # Comparte la última hoja PDF con el registro anterior
     pg_pdf_manual: str = ""        # Rango de páginas PDF manual (vacío = calculado)

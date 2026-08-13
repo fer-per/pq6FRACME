@@ -2,7 +2,8 @@
 Repositorio Excel — implementación del ExcelRepositoryPort.
 
 Carga inventarios archivísticos desde archivos Excel (.xlsx)
-usando pandas + openpyxl, con mapeo inteligente de columnas.
+usando pandas + openpyxl, con mapeo de columnas y metadatos
+configurable a través del archivo maestro (mapa_maestro.json).
 """
 import logging
 import re
@@ -10,23 +11,26 @@ import unicodedata
 from typing import List, Optional
 
 import pandas as pd
+from openpyxl import load_workbook
 
 from src.domain.entities import InventoryRecord
 from src.domain.ports.excel_port import ExcelRepositoryPort
 from src.domain.value_objects import (
     HEADER_ROWS,
-    COLUMN_ALIASES,
-    FALLBACK_COLUMNS,
     SKIP_ROW_KEYWORDS,
     ANNOTATION_KEYWORDS,
     EMPTY_VALUES,
 )
+from src.infrastructure.mapeo_maestro import MapeoMaestro, cargar_mapeo_maestro
 
 logger = logging.getLogger(__name__)
 
 
 class ExcelRepository(ExcelRepositoryPort):
     """Implementación concreta del repositorio Excel."""
+
+    def __init__(self, mapeo: Optional[MapeoMaestro] = None):
+        self._mapeo = mapeo or cargar_mapeo_maestro()
 
     def cargar_registros(
         self,
@@ -117,6 +121,7 @@ class ExcelRepository(ExcelRepositoryPort):
                 fecha_fin=self._get_col(row, col_map, "fecha_fin"),
                 interesado1=self._get_col(row, col_map, "interesado1"),
                 interesado2=self._get_col(row, col_map, "interesado2"),
+                interesado3=self._get_col(row, col_map, "interesado3"),
                 data_topica=self._get_col(row, col_map, "data_topica"),
             ))
 
@@ -124,13 +129,14 @@ class ExcelRepository(ExcelRepositoryPort):
         return records
 
     def extraer_metadatos(self, ruta: str, fila_datos_inicio: int) -> dict:
-        """Extrae metadatos globales del Excel."""
+        """Extrae metadatos globales del Excel desde las filas del mapeo maestro."""
         logger.info("Extrayendo metadatos de: %s", ruta)
 
         metadatos = {
             "filepath": ruta,
             "siglo": "",
-            "acervo_num": "7",
+            "escribano": "",
+            "acervo_num": "",
         }
 
         try:
@@ -139,28 +145,72 @@ class ExcelRepository(ExcelRepositoryPort):
                 ruta, header=None, nrows=nrows, engine='openpyxl'
             )
 
-            for idx, row in df_header.iterrows():
-                for cell in row:
-                    cell_str = self._safe_str(cell)
+            # Leer cada metadato desde la (fila, columna) del mapeo maestro
+            siglo_ubic = self._mapeo.ubicacion_metadato("siglo")
+            escribano_ubic = self._mapeo.ubicacion_metadato("escribano")
+            acervo_ubic = self._mapeo.ubicacion_metadato("acervo")
 
-                    # Buscar siglo: "Sección: XIX"
-                    if "secci" in cell_str.lower():
-                        match = re.search(
-                            r'[:\s]+([IVXLCDM]+)', cell_str, re.IGNORECASE
-                        )
-                        if match:
-                            metadatos["siglo"] = match.group(1).upper()
+            if siglo_ubic is not None:
+                cell = self._celda(df_header, siglo_ubic.fila, siglo_ubic.columna)
+                metadatos["siglo"] = self._extraer_siglo_romano(cell)
 
-                    # Buscar acervo: "Código del fondo: N07"
-                    if "c\u00f3digo" in cell_str.lower() or "codigo" in cell_str.lower():
-                        match = re.search(r'N?(\d+)', cell_str)
-                        if match:
-                            metadatos["acervo_num"] = match.group(1)
+            if escribano_ubic is not None:
+                cell = self._celda(df_header, escribano_ubic.fila, escribano_ubic.columna)
+                metadatos["escribano"] = self._extraer_escribano(cell)
+
+            if acervo_ubic is not None:
+                cell = self._celda(df_header, acervo_ubic.fila, acervo_ubic.columna)
+                metadatos["acervo_num"] = self._extraer_acervo(cell)
 
         except Exception as e:
             logger.warning("Error extrayendo metadatos: %s", e)
 
         return metadatos
+
+    @staticmethod
+    def _celda(df_header, fila: int, columna: int) -> str:
+        """Lee una celda 1-based del DataFrame de cabecera como string."""
+        if fila - 1 >= len(df_header):
+            return ""
+        row = df_header.iloc[fila - 1]
+        if columna - 1 >= len(row):
+            return ""
+        return ExcelRepository._safe_str(row.iloc[columna - 1])
+
+    @staticmethod
+    def _extraer_siglo_romano(cell: str) -> str:
+        """Busca un siglo romano en el texto de la celda (ej: 'Sección: XIX')."""
+        if not cell:
+            return ""
+        match = re.search(
+            r'[:\s]+([IVXLCDM]+)', cell, re.IGNORECASE
+        )
+        if match:
+            return match.group(1).upper()
+        return ""
+
+    @staticmethod
+    def _extraer_escribano(cell: str) -> str:
+        """Obtiene el escribano del texto de la celda.
+
+        Soporta formatos como 'Escribano: Don Pedro' o el nombre directo.
+        """
+        if not cell:
+            return ""
+        for sep in (":", "—", "-"):
+            if sep in cell:
+                return cell.split(sep, 1)[1].strip()
+        return cell.strip()
+
+    @staticmethod
+    def _extraer_acervo(cell: str) -> str:
+        """Extrae el número de acervo del texto (ej: 'Código del fondo: N07')."""
+        if not cell:
+            return ""
+        match = re.search(r'N?(\d+)', cell)
+        if match:
+            return match.group(1)
+        return ""
 
     def detectar_fila_inicio_datos(self, ruta: str) -> Optional[int]:
         """Detecta la fila 1-based donde empiezan los datos."""
@@ -185,13 +235,91 @@ class ExcelRepository(ExcelRepositoryPort):
 
         return None
 
+    def guardar_registros(
+        self,
+        ruta: str,
+        fila_datos_inicio: int,
+        records: List[InventoryRecord],
+    ) -> int:
+        """Escribe de vuelta los valores de los registros en el Excel.
+
+        Solo se sobrescriben las columnas localizadas por el mapa maestro
+        y los registros con ``fila`` válida. Las celdas cuyo valor en el
+        registro está vacío no se tocan, para no borrar contenido que no
+        fue parseado.
+        """
+        try:
+            wb = load_workbook(ruta)
+        except Exception as e:
+            logger.error("No se pudo abrir el Excel para guardar: %s", e)
+            raise
+
+        ws = wb.worksheets[0]
+        columnas = self._indices_columnas(ws, fila_datos_inicio)
+
+        celdas = 0
+        for record in records:
+            fila = record.fila
+            if not fila:
+                continue
+            for campo, col in columnas.items():
+                valor = getattr(record, campo, "")
+                if valor in (None, ""):
+                    continue
+                ws.cell(row=fila, column=col).value = valor
+                celdas += 1
+
+        wb.save(ruta)
+        logger.info("Guardados %d valores en el Excel %s.", celdas, ruta)
+        return celdas
+
+    def _indices_columnas(self, ws, fila_datos_inicio: int) -> dict:
+        """Localiza la columna (1-based) de cada campo en las filas de encabezado.
+
+        Recrea el texto combinado de cada columna a partir de las
+        ``HEADER_ROWS`` filas previas a los datos, igual que hace
+        ``_mapear_columnas`` con el MultiIndex de pandas.
+        """
+        ncols = ws.max_column or 0
+        encabezado = []
+        for r in range(fila_datos_inicio - HEADER_ROWS, fila_datos_inicio):
+            fila_texto = [
+                self._safe_str(ws.cell(row=r, column=c).value)
+                for c in range(1, ncols + 1)
+            ]
+            encabezado.append(fila_texto)
+
+        indices = {}
+        for campo, mapeo in self._mapeo.columnas.items():
+            idx = None
+            for c in range(ncols):
+                texto = self._sin_acentos(
+                    " ".join(fila[c] for fila in encabezado).lower()
+                )
+                if any(
+                    self._sin_acentos(a.lower()) in texto
+                    for a in mapeo.aliases
+                ):
+                    idx = c
+                    break
+            if idx is None and mapeo.indice_fallback is not None:
+                idx = mapeo.indice_fallback
+            if idx is not None:
+                indices[campo] = idx + 1
+
+        return indices
+
     def _mapear_columnas(self, columnas: List[str]) -> dict:
-        """Mapea nombres de columnas del Excel a campos del modelo."""
+        """Mapea nombres de columnas del Excel a campos del modelo.
+
+        Usa el mapeo maestro (aliases + índice de respaldo). Si no hay un
+        campo mapeado, se lo omite del resultado.
+        """
         col_map = {}
         columnas_lower = [self._sin_acentos(c.lower()) for c in columnas]
 
-        for campo, aliases in COLUMN_ALIASES.items():
-            for alias in aliases:
+        for campo, mapeo in self._mapeo.columnas.items():
+            for alias in mapeo.aliases:
                 alias_norm = self._sin_acentos(alias)
                 for i, col_lower in enumerate(columnas_lower):
                     if alias_norm in col_lower:
@@ -200,10 +328,10 @@ class ExcelRepository(ExcelRepositoryPort):
                 if campo in col_map:
                     break
 
-        # Fallbacks por índice
-        for campo, idx in FALLBACK_COLUMNS.items():
-            if campo not in col_map and idx < len(columnas):
-                col_map[campo] = idx
+            # Fallback por índice
+            if campo not in col_map and mapeo.indice_fallback is not None:
+                if mapeo.indice_fallback < len(columnas):
+                    col_map[campo] = mapeo.indice_fallback
 
         return col_map
 

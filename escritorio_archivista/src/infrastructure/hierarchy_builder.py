@@ -2,11 +2,32 @@
 Constructor de jerarquía documental de 11 niveles.
 
 Genera las rutas de carpetas para organizar los fragmentos PDF
-siguiendo la estructura archivística definida.
+siguiendo la estructura archivística definida. La jerarquía SIEMPRE
+se construye de forma íntegra con sus 11 niveles; cada nivel que
+carece del dato correspondiente usa un nombre de respaldo (SIN ...)
+y se continúa con los siguientes niveles.
 
-Caso excepcional: cuando un registro no tiene fecha, el PDF se
-guarda directamente en la carpeta del escribano, omitiendo los
-niveles derivados de la fecha (SIGLO, AÑO, PROTOCOLO, etc.).
+Niveles:
+1. ACERVO DOCUMENTAL NUMERO {acervo_num}     ← metadato (fila del Excel)
+2. SIGLO {siglo_arabigo}                     ← metadato romano (fila del Excel)
+3. FONDO DOCUMENTAL                          ← constante
+4. {escribano}                               ← metadato (fila del Excel)
+5. {año}                                     ← de la fecha de inicio
+6. PROTOCOLO {protocolo}                     ← del registro
+7. REGISTRO {registro}                       ← número real del catálogo
+8. {titulo}                                  ← valor literal de la columna
+9. {mes}                                     ← de la fecha de inicio
+10. {interesado1}                            ← 1er interesado (antes de la coma)
+11. {interesado2}.pdf                        ← nombre del archivo
+
+Respaldo por nivel cuando falta el dato:
+- SIN SIGLO, SIN ESCRIBANO, SIN AÑO, SIN PROTOCOLO, SIN REGISTRO,
+  SIN TITULO DE ESCRITURA, SIN MES.
+- Para interesados: se usa el siguiente disponible; si no hay ninguno,
+  "DATOS DE LOS INTERESADOS ILEGIBLES".
+
+Si dos PDFs comparten el mismo nombre dentro de la misma carpeta,
+se asigna numeración sucesiva: {nombre}.pdf, {nombre}_2.pdf, ...
 """
 import logging
 import os
@@ -16,11 +37,19 @@ from typing import Optional, Tuple
 from src.domain.entities import InventoryRecord
 from src.domain.ports.hierarchy_port import HierarchyBuilderPort
 from src.domain.value_objects import (
-    TITLE_DEFAULT,
     MONTH_NAMES,
     YEAR_MIN,
     YEAR_MAX,
     INVALID_FILENAME_CHARS,
+    ROMAN_TO_ARABIC,
+    SIN_SIGLO,
+    SIN_ESCRIBANO,
+    SIN_ANIO,
+    SIN_PROTOCOLO,
+    SIN_REGISTRO,
+    SIN_TITULO,
+    SIN_MES,
+    INTERESADOS_ILEGIBLES,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,103 +59,152 @@ class HierarchyBuilder(HierarchyBuilderPort):
     """
     Implementación del constructor de jerarquía de 11 niveles.
 
-    Niveles:
-    1. ACERVO DOCUMENTAL NUMERO {acervo_num}
-    2. SIGLO {siglo_arabigo}
-    3. FONDO DOCUMENTAL
-    4. {escribano}
-    5. {año}
-    6. PROTOCOLO {protocolo}
-    7. REGISTRO {registro} (número real del catálogo; fallback al ID interno)
-    8. {titulo} (valor literal de la columna "titulo")
-    9. {mes}
-    10. {interesado1}
-    11. {interesado2}.pdf (nombre del archivo)
-
-    Excepción: si el registro no tiene fecha, se crea únicamente la
-    carpeta "SIN FECHA" en la raíz del directorio de salida:
-    {output_dir}/SIN FECHA/{interesado1}/{interesado2}.pdf
-
-    Si dos PDFs comparten el mismo nombre dentro de la misma carpeta,
-    se asigna una numeración sucesiva según el orden de creación:
-    {nombre}.pdf, {nombre}_2.pdf, {nombre}_3.pdf, ...
+    La jerarquía siempre se construye completa; cada nivel sin dato
+    usa su nombre de respaldo.
     """
 
     def construir_ruta(
         self,
         record: InventoryRecord,
         output_dir: str,
-        acervo_num: str,
+        acervo_num: str = "",
+        escribano: str = "",
+        siglo: str = "",
     ) -> str:
         """Construye la ruta completa de 11 niveles para un registro."""
         anio, mes = self._extraer_anio_mes(record)
+        registro_id = record.id.replace("#", "")
 
-        if anio is None:
-            full_path = self._ruta_sin_fecha(record, output_dir)
-        else:
-            full_path = self._ruta_con_fecha(
-                record, output_dir, acervo_num, anio, mes
-            )
+        niveles = [
+            self._nivel_acervo(acervo_num),
+            self._nivel_siglo(siglo, anio),
+            "FONDO DOCUMENTAL",
+            self._nivel_escribano(escribano),
+            self._nivel_anio(anio),
+            self._nivel_protocolo(record),
+            self._nivel_registro(record, registro_id),
+            self._nivel_titulo(record),
+            self._nivel_mes(mes),
+            self._nivel_interesado1(record),
+            self._nombre_archivo(record, registro_id),
+        ]
 
+        full_path = os.path.join(output_dir, *niveles)
         return self._resolver_colision(full_path)
 
-    def _ruta_con_fecha(
-        self,
-        record: InventoryRecord,
-        output_dir: str,
-        acervo_num: str,
-        anio: int,
-        mes: int,
-    ) -> str:
-        """Construye la ruta completa (con fecha) de 11 niveles."""
-        siglo_arabigo = (anio // 100) + 1
-        registro_id = record.id.replace("#", "")
+    @staticmethod
+    def _nivel_acervo(acervo_num: str) -> str:
+        """Nivel 1: número de acervo (metadato global)."""
+        valor = (acervo_num or "").strip()
+        if not valor:
+            return "ACERVO DOCUMENTAL"
+        return f"ACERVO DOCUMENTAL NUMERO {HierarchyBuilder._sanitize(valor)}"
 
-        n1 = f"ACERVO DOCUMENTAL NUMERO {acervo_num}"
-        n2 = f"SIGLO {siglo_arabigo}"
-        n3 = "FONDO DOCUMENTAL"
-        n4 = self._sanitize(record.escribano or "SIN_ESCRIBANO")
-        n5 = str(anio)
-        n6 = f"PROTOCOLO {self._sanitize(record.protocolo or '0')}"
-        n7 = self._nivel_registro(record, registro_id)
-        n8 = self._nivel_titulo(record)
-        n9 = MONTH_NAMES.get(mes, "1. ENERO")
-        n10 = self._nivel_interesado1(record, registro_id)
-        n11 = self._nombre_archivo(record, registro_id)
+    @staticmethod
+    def _nivel_siglo(siglo: str, anio: Optional[int]) -> str:
+        """Nivel 2: siglo arábigo a partir del romano (metadato) o del año."""
+        romano = (siglo or "").strip().upper()
+        if romano:
+            valor = ROMAN_TO_ARABIC.get(romano)
+            if valor:
+                return f"SIGLO {valor}"
+        if anio is not None:
+            return f"SIGLO {(anio // 100) + 1}"
+        return SIN_SIGLO
 
-        return os.path.join(
-            output_dir, n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11
+    @staticmethod
+    def _nivel_escribano(escribano: str) -> str:
+        """Nivel 4: escribano global; si falta, respaldo."""
+        valor = (escribano or "").strip()
+        if not valor:
+            return SIN_ESCRIBANO
+        return HierarchyBuilder._sanitize(valor)
+
+    @staticmethod
+    def _nivel_anio(anio: Optional[int]) -> str:
+        """Nivel 5: año; si falta, respaldo."""
+        if anio is None:
+            return SIN_ANIO
+        return str(anio)
+
+    @staticmethod
+    def _nivel_protocolo(record: InventoryRecord) -> str:
+        """Nivel 6: protocolo; si falta, respaldo."""
+        protocolo = (record.protocolo or "").strip()
+        if not protocolo:
+            return SIN_PROTOCOLO
+        return f"PROTOCOLO {HierarchyBuilder._sanitize(protocolo)}"
+
+    @staticmethod
+    def _nivel_registro(record: InventoryRecord, registro_id: str) -> str:
+        """
+        Nivel 7: número real del registro; si falta o es inválido, respaldo.
+        """
+        valor = (record.registro or "").strip()
+
+        # Valores que no son un número de registro: vacío, hora mal
+        # interpretada, filas de índice/sub-encabezado o anotaciones.
+        if valor and valor not in ("0", "00:00:00") and ":" not in valor \
+                and not re.search(r'(?i)(registro|protocolo|indice|salto)', valor):
+            return f"REGISTRO {HierarchyBuilder._sanitize(valor)}"
+
+        return SIN_REGISTRO
+
+    @staticmethod
+    def _nivel_titulo(record: InventoryRecord) -> str:
+        """Nivel 8: título literal de la columna; si falta, respaldo."""
+        titulo = (record.titulo or "").strip()
+        if not titulo:
+            return SIN_TITULO
+        return HierarchyBuilder._sanitize(titulo)
+
+    @staticmethod
+    def _nivel_mes(mes: Optional[int]) -> str:
+        """Nivel 9: mes del MONTH_NAMES; si falta, respaldo."""
+        if mes is None:
+            return SIN_MES
+        return MONTH_NAMES.get(mes, SIN_MES)
+
+    @staticmethod
+    def _nivel_interesado1(record: InventoryRecord) -> str:
+        """
+        Nivel 10: carpeta del interesado 1.
+
+        Si no hay interesado 1 se usa el 2; si no, el 3; si no hay
+        ninguno se usa 'DATOS DE LOS INTERESADOS ILEGIBLES'.
+        """
+        nombre = HierarchyBuilder._primer_interesado_disponible(
+            record.interesado1, record.interesado2, record.interesado3
         )
-
-    def _ruta_sin_fecha(
-        self,
-        record: InventoryRecord,
-        output_dir: str,
-    ) -> str:
-        """
-        Construye la ruta cuando el registro no tiene fecha.
-
-        Se crea únicamente la carpeta "SIN FECHA" en la raíz del
-        directorio de salida, con las carpetas de interesados:
-        {output_dir}/SIN FECHA/{interesado1}/{pdf}
-        """
-        registro_id = record.id.replace("#", "")
-
-        n_sin_fecha = "SIN FECHA"
-        n10 = self._nivel_interesado1(record, registro_id)
-        n11 = self._nombre_archivo(record, registro_id)
-
-        return os.path.join(output_dir, n_sin_fecha, n10, n11)
+        if nombre:
+            return HierarchyBuilder._sanitize(nombre)
+        return INTERESADOS_ILEGIBLES
 
     @staticmethod
     def _nombre_archivo(record: InventoryRecord, registro_id: str) -> str:
-        """Genera el nombre del archivo PDF usando interesado 2, 1 o el ID."""
-        nombre = HierarchyBuilder._primer_interesado(
-            record.interesado2 or record.interesado1
+        """
+        Nivel 11: nombre del archivo PDF.
+
+        Usa el interesado 2; si no hay, el 1; si no, el 3; si no hay
+        ninguno, 'DATOS DE LOS INTERESADOS ILEGIBLES.pdf'.
+        """
+        nombre = HierarchyBuilder._primer_interesado_disponible(
+            record.interesado2, record.interesado1, record.interesado3
         )
         if nombre:
             return f"{HierarchyBuilder._sanitize(nombre)}.pdf"
-        return f"{registro_id}.pdf"
+        return f"{INTERESADOS_ILEGIBLES}.pdf"
+
+    @staticmethod
+    def _primer_interesado_disponible(*nombres) -> str:
+        """Devuelve el primer interesado no vacío (truncado a la primera coma)."""
+        for nombre in nombres:
+            if not nombre:
+                continue
+            resultado = HierarchyBuilder._primer_interesado(nombre)
+            if resultado:
+                return resultado
+        return ""
 
     @staticmethod
     def _primer_interesado(nombre: str) -> str:
@@ -141,56 +219,6 @@ class HierarchyBuilder(HierarchyBuilderPort):
         if not nombre:
             return ""
         return nombre.split(",", 1)[0].strip()
-
-    @staticmethod
-    def _nivel_registro(record: InventoryRecord, registro_id: str) -> str:
-        """
-        Genera el nivel REGISTRO usando el número real del catálogo.
-
-        En el inventario, un mismo "Registro N°X" agrupa varias escrituras;
-        usar el ID interno (generado por orden de fila) fragmentaría ese
-        grupo en una carpeta por documento. Se usa ``record.registro`` cuando
-        el valor es válido y, si no, se cae al ID interno para conservar
-        rutas únicas.
-
-        Args:
-            record: Registro del inventario.
-            registro_id: ID interno sin el prefijo '#'.
-
-        Returns:
-            Nombre del nivel, ej: "REGISTRO 3" o "REGISTRO 0001".
-        """
-        valor = (record.registro or "").strip()
-
-        # Valores que no son un número de registro: vacío, hora mal
-        # interpretada, filas de índice/sub-encabezado o anotaciones.
-        if valor and valor not in ("0", "00:00:00") and ":" not in valor \
-                and not re.search(r'(?i)(registro|protocolo|indice|salto)', valor):
-            return f"REGISTRO {HierarchyBuilder._sanitize(valor)}"
-
-        return f"REGISTRO {registro_id}"
-
-    @staticmethod
-    def _nivel_titulo(record: InventoryRecord) -> str:
-        """
-        Genera el nivel TITULO usando el valor literal de la columna.
-
-        La carpeta del título de escritura se nombra con el texto
-        exacto de la columna ``titulo``. Si está vacío, se usa un
-        valor por defecto.
-        """
-        titulo = (record.titulo or "").strip()
-        if not titulo:
-            return TITLE_DEFAULT
-        return HierarchyBuilder._sanitize(titulo)
-
-    @staticmethod
-    def _nivel_interesado1(record: InventoryRecord, registro_id: str) -> str:
-        """Genera la carpeta del 1er interesado, con respaldo en el ID."""
-        nombre = HierarchyBuilder._primer_interesado(record.interesado1)
-        if nombre:
-            return HierarchyBuilder._sanitize(nombre)
-        return f"Interesado_A_{registro_id}"
 
     def _extraer_anio_mes(
         self, record: InventoryRecord
@@ -217,7 +245,7 @@ class HierarchyBuilder(HierarchyBuilderPort):
         if record.registro:
             match = re.search(r'(\d{4})', record.registro)
             if match and self._es_anio_valido(int(match.group(1))):
-                return int(match.group(1)), 1
+                return int(match.group(1)), None
 
         return None, None
 
@@ -227,8 +255,9 @@ class HierarchyBuilder(HierarchyBuilderPort):
         Parsea una fecha textual en ``(anio, mes)``.
 
         Acepta formatos ``d/m/yyyy``, ``yyyy-mm-dd`` y cualquier año de
-        4 dígitos dentro del texto. Devuelve ``None`` si no hay una fecha
-        válida.
+        4 dígitos dentro del texto. Si solo aparece el año, devuelve
+        ``(anio, None)`` (mes desconocido). Devuelve ``None`` si no hay
+        una fecha válida.
         """
         # Formato d/m/yyyy
         match = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', valor)
@@ -249,7 +278,7 @@ class HierarchyBuilder(HierarchyBuilderPort):
         # Cualquier año de 4 dígitos dentro del texto
         match = re.search(r'(\d{4})', valor)
         if match and HierarchyBuilder._es_anio_valido(int(match.group(1))):
-            return int(match.group(1)), 1
+            return int(match.group(1)), None
 
         return None
 

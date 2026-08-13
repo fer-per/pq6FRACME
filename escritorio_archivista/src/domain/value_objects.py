@@ -9,6 +9,12 @@ No depende de ninguna librería externa.
 HEADER_ROWS = 2                 # Filas de encabezado de columna
 DEFAULT_DATA_START_ROW = 19     # Fila (1-based) donde empiezan los datos por defecto
 
+# ─── Ubicación de metadatos en el encabezado (1-based) ───────
+# Filas donde se encuentra cada valor global del inventario.
+SIGLO_FILA = 4                  # Fila del siglo (ej: "Sección: XIX")
+ESCRIBANO_FILA = 6              # Fila del escribano (ej: "Escribano: Don X")
+ACERVO_FILA = 7                 # Fila del código del acervo (ej: "Código del fondo: N07")
+
 # ─── Folio Analysis ─────────────────────────────────────────
 YEAR_MIN = 1500           # Año mínimo válido para documentos históricos
 YEAR_MAX = 2100           # Año máximo válido
@@ -46,6 +52,9 @@ COLUMN_ALIASES = {
     "interesado2": [
         "interesado 2",
     ],
+    "interesado3": [
+        "interesado 3",
+    ],
 }
 
 # ─── Columnas fallback por índice ────────────────────────────
@@ -70,6 +79,16 @@ EMPTY_VALUES = {"nan", "nat", "none", ""}
 
 # ─── Clasificación de títulos para jerarquía ────────────────
 TITLE_DEFAULT = "ESCRITURA_VARIAS"
+
+# ─── Nombres de respaldo para carpetas de la jerarquía ───────
+SIN_SIGLO = "SIN SIGLO"
+SIN_ESCRIBANO = "SIN ESCRIBANO"
+SIN_ANIO = "SIN AÑO"
+SIN_PROTOCOLO = "SIN PROTOCOLO"
+SIN_REGISTRO = "SIN REGISTRO"
+SIN_TITULO = "SIN TITULO DE ESCRITURA"
+SIN_MES = "SIN MES"
+INTERESADOS_ILEGIBLES = "DATOS DE LOS INTERESADOS ILEGIBLES"
 
 # ─── Meses para jerarquía ───────────────────────────────────
 MONTH_NAMES = {

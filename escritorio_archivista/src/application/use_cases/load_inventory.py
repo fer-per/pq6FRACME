@@ -98,7 +98,9 @@ class CargarInventarioUseCase:
             "total_records": len(records),
             "errores_count": len(analysis.errores),
             "advertencias_count": len(analysis.advertencias),
-            "acervo_detectado": metadata.get("acervo_num", "7"),
+            "acervo_detectado": metadata.get("acervo_num", ""),
+            "escribano_detectado": metadata.get("escribano", ""),
+            "siglo_detectado": metadata.get("siglo", ""),
             "fila_datos_inicio": fila_datos_inicio,
         })
 

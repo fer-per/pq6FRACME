@@ -91,6 +91,7 @@ class AnalyzerVM(QObject):
                 break
         self._state.records_changed.emit()
         self.correction_applied.emit()
+        self.guardar_en_excel()
 
     def apply_pagination(self, record_id: str, comparte_hoja: bool,
                          pg_pdf_manual: str):
@@ -120,6 +121,26 @@ class AnalyzerVM(QObject):
                 break
         self._state.records_changed.emit()
         self.correction_applied.emit()
+        self.guardar_en_excel()
+
+    def guardar_en_excel(self) -> bool:
+        """Escribe las correcciones de vuelta al Excel cargado."""
+        ruta = self._state.excel_path
+        if not ruta:
+            logger.debug("Guardado automático omitido: no hay Excel cargado.")
+            return False
+        try:
+            total = self._container.excel_repo.guardar_registros(
+                ruta, self._state.fila_datos_inicio, list(self._state.records)
+            )
+            self._state.add_log(
+                "SUCCESS", f"Guardado en Excel: {total} celda(s) actualizada(s)."
+            )
+            return True
+        except Exception as e:
+            logger.error("Error guardando en Excel: %s", e)
+            self._state.add_log("ERR", f"No se pudo guardar en Excel: {e}")
+            return False
 
     def apply_changes(self, record_id: str, cambios: dict):
         """Aplica los cambios combinados del modal de corrección.
@@ -153,3 +174,4 @@ class AnalyzerVM(QObject):
 
         self._state.records_changed.emit()
         self.correction_applied.emit()
+        self.guardar_en_excel()

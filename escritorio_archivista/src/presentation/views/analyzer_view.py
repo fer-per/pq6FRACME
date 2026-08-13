@@ -12,11 +12,12 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
     QTabWidget, QSizePolicy,
 )
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QSize, Signal
 
 from src.application.container import Container
 from src.presentation.viewmodels.app_state import AppStateVM
 from src.presentation.viewmodels.analyzer_vm import AnalyzerVM
+from src.presentation.undo_redo import UndoRedo
 from src.domain.entities import AnalysisResult
 from src.presentation.constants import (
     TOOLBAR_ICON_SIZE, ICON_ANALYZE, ICON_CORRECT,
@@ -194,8 +195,12 @@ class AnalyzerErrorTab(QWidget):
 
     Muestra la lista completa de registros del inventario y, tras
     ejecutar el análisis, resalta en rojo las celdas cuyo dato
-    presenta un error.
+    presenta un error. Cada pestaña mantiene su propio historial de
+    Deshacer/Rehacer, independiente de las demás.
     """
+
+    undo_requested = Signal()
+    redo_requested = Signal()
 
     def __init__(self, name: str, columns=None, field: str = "",
                  field_label: str = "", parent=None):
@@ -209,6 +214,7 @@ class AnalyzerErrorTab(QWidget):
         self._records = []
         self._errors = []
         self._total_revisados = 0
+        self.history = UndoRedo(self)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -221,6 +227,22 @@ class AnalyzerErrorTab(QWidget):
         info_bar.addWidget(self._info_label)
         info_bar.addStretch()
 
+        self._undo_btn = QPushButton("\u21B6 Deshacer")
+        self._undo_btn.setProperty("flat", True)
+        self._undo_btn.setFixedHeight(28)
+        self._undo_btn.setEnabled(False)
+        self._undo_btn.setToolTip("Deshace la última corrección en este analizador")
+        self._undo_btn.clicked.connect(self._on_undo_clicked)
+        info_bar.addWidget(self._undo_btn)
+
+        self._redo_btn = QPushButton("Rehacer \u21B7")
+        self._redo_btn.setProperty("flat", True)
+        self._redo_btn.setFixedHeight(28)
+        self._redo_btn.setEnabled(False)
+        self._redo_btn.setToolTip("Reaplica la última corrección deshecha")
+        self._redo_btn.clicked.connect(self._on_redo_clicked)
+        info_bar.addWidget(self._redo_btn)
+
         self._filter_btn = QPushButton("Solo L\u00edneas con Error")
         self._filter_btn.setProperty("flat", True)
         self._filter_btn.setFixedHeight(28)
@@ -229,11 +251,23 @@ class AnalyzerErrorTab(QWidget):
         info_bar.addWidget(self._filter_btn)
         layout.addLayout(info_bar)
 
+        self.history.changed.connect(self._on_history_changed)
+
         # Tabla: datos completos del registro + observación/error
         columns = [label for label, _ in self._columns]
         field_map = [field for _, field in self._columns]
         self._table = DataTable(columns=columns, field_map=field_map)
         layout.addWidget(self._table)
+
+    def _on_undo_clicked(self):
+        self.undo_requested.emit()
+
+    def _on_redo_clicked(self):
+        self.redo_requested.emit()
+
+    def _on_history_changed(self):
+        self._undo_btn.setEnabled(self.history.can_undo)
+        self._redo_btn.setEnabled(self.history.can_redo)
 
     def set_data(self, records: list, errors: list,
                  total_revisados: int = 0):
@@ -403,6 +437,7 @@ class AnalyzerView(QWidget):
         self._analyze_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         self._analyze_btn.clicked.connect(self._vm.run_analysis)
         header.addWidget(self._analyze_btn)
+
         layout.addLayout(header)
 
         # Paneles de resumen (2x2 para mayor amplitud y responsividad)
@@ -493,6 +528,8 @@ class AnalyzerView(QWidget):
             tab.get_table().row_clicked.connect(
                 lambda row, data, t=tab: self._on_error_row_clicked(row, data, t)
             )
+            tab.undo_requested.connect(lambda t=tab: self._on_undo(t))
+            tab.redo_requested.connect(lambda t=tab: self._on_redo(t))
 
     def _on_error_row_clicked(self, row: int, data, tab):
         """Guarda selección, habilita corrección/validación y navega a la página PDF."""
@@ -529,7 +566,9 @@ class AnalyzerView(QWidget):
         if rid is None:
             return
         rid = rid.id
-        validadas = set(self._state.incidencias_validadas)
+        tab = getattr(self, '_current_tab', None)
+        antes = set(self._state.incidencias_validadas)
+        validadas = set(antes)
         if checked:
             validadas.add(rid)
         else:
@@ -539,6 +578,12 @@ class AnalyzerView(QWidget):
             "SUCCESS",
             f"Registro {rid} {'validado como correcto' if checked else 'desmarcado'}."
         )
+        if tab is not None:
+            tab.history.push({
+                "desc": "validar" if checked else "desmarcar",
+                "revert": [("@validated", None, antes)],
+                "apply": [("@validated", None, set(validadas))],
+            })
         if self._last_result is not None:
             self._on_analysis_finished(self._last_result)
 
@@ -670,8 +715,68 @@ class AnalyzerView(QWidget):
         if record is None:
             return
 
+        campos = [c for c in {
+            field, "comparte_hoja", "pg_pdf_manual", "pg_pdf", "estado"
+        } if c]
+        antes = self._snapshot(record, campos)
+
         modal = FieldCorrectionModal(
             record, field, field_label, self, dark=self._state.dark_mode
         )
-        modal.correction_accepted.connect(self._vm.apply_changes)
+        modal.correction_accepted.connect(
+            lambda rid, cambios, t=tab, a=antes, c=campos:
+            self._on_correction_accepted(t, rid, cambios, a, c)
+        )
         modal.exec()
+
+    def _on_correction_accepted(self, tab, rid, cambios, antes, campos):
+        """Aplica una corrección y la registra en el historial de su analizador."""
+        self._vm.apply_changes(rid, cambios)
+        record = self._find_record(rid)
+        despues = self._snapshot(record, campos) if record else antes
+        if antes != despues:
+            tab.history.push({
+                "desc": "corrección",
+                "revert": antes,
+                "apply": despues,
+            })
+
+    def _snapshot(self, record, campos: list) -> list:
+        """Captura los valores actuales de un registro para el historial."""
+        return [(record.id, c, getattr(record, c, "")) for c in campos]
+
+    def _find_record(self, rid):
+        for rec in self._state.records:
+            if rec.id == rid:
+                return rec
+        return None
+
+    def _apply_entries(self, entries):
+        """Aplica una lista de entradas (registro/campo/valor) del historial."""
+        for rid, campo, valor in entries:
+            if campo == "@validated":
+                self._state.incidencias_validadas = set(valor)
+                continue
+            rec = self._find_record(rid)
+            if rec is not None:
+                setattr(rec, campo, valor)
+
+    def _on_undo(self, tab):
+        """Deshace la última acción del analizador correspondiente."""
+        action = tab.history.undo()
+        if action is None:
+            return
+        self._apply_entries(action["revert"])
+        self._state.add_log("INFO", f"Deshecha: {action.get('desc', 'acción')}")
+        self._vm.guardar_en_excel()
+        self._vm.run_analysis()
+
+    def _on_redo(self, tab):
+        """Reaplica la última acción deshecha del analizador."""
+        action = tab.history.redo()
+        if action is None:
+            return
+        self._apply_entries(action["apply"])
+        self._state.add_log("INFO", f"Rehecha: {action.get('desc', 'acción')}")
+        self._vm.guardar_en_excel()
+        self._vm.run_analysis()

@@ -35,7 +35,9 @@ class FragmentarPDFUseCase:
         records: List[InventoryRecord],
         pdf_path: str,
         output_dir: str,
-        acervo_num: str,
+        acervo_num: str = "",
+        escribano: str = "",
+        siglo: str = "",
         pag_pdf_inicio: int = 1,
         segmentos: Optional[list] = None,
         exclusiones: Optional[List[ExclusionRule]] = None,
@@ -156,7 +158,7 @@ class FragmentarPDFUseCase:
                 # Construir ruta de destino
                 try:
                     dest_path = self._hierarchy_builder.construir_ruta(
-                        record, output_dir, acervo_num,
+                        record, output_dir, acervo_num, escribano, siglo,
                     )
 
                     # Crear directorio padre

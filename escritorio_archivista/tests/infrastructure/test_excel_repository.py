@@ -136,8 +136,9 @@ class TestExcelRepository:
         wb = Workbook()
         ws = wb.active
         ws.cell(row=1, column=1, value="Inventario")
-        ws.cell(row=2, column=1, value="Sección: XIX")
-        ws.cell(row=3, column=1, value="Código del fondo: N07")
+        ws.cell(row=4, column=1, value="Sección: XIX")
+        ws.cell(row=6, column=1, value="Escribano: Don Pedro")
+        ws.cell(row=7, column=1, value="Código del fondo: N07")
         for h in range(HEADER_ROWS):
             r = 10 - HEADER_ROWS + h
             ws.cell(row=r, column=1, value="N° de Registro")
@@ -146,6 +147,7 @@ class TestExcelRepository:
 
         metadatos = self.repo.extraer_metadatos(self.path, fila_datos_inicio=10)
         assert metadatos["siglo"] == "XIX"
+        assert metadatos["escribano"] == "Don Pedro"
         assert metadatos["acervo_num"] == "07"
 
     def test_detectar_fila_inicio_datos(self):
@@ -211,3 +213,58 @@ class TestExcelRepository:
         ws.cell(row=2, column=2, value="solo texto")
         wb.save(self.path)
         assert self.repo.detectar_fila_inicio_datos(self.path) is None
+
+    def test_guardar_registros_escribe_correcciones_en_excel(self):
+        """Las correcciones se escriben en las columnas correctas del Excel."""
+        _crear_inventario(self.path, data_start_row=10)
+        records = self.repo.cargar_registros(
+            self.path, fila_datos_inicio=10, fila_inicio=10, fila_fin=12
+        )
+        assert len(records) == 3
+
+        # Aplicar correcciones en memoria
+        records[0].folios = "500r-501v"
+        records[1].escribano = "RODRIGO"
+        records[2].protocolo = "99"
+
+        celdas = self.repo.guardar_registros(
+            self.path, fila_datos_inicio=10, records=records
+        )
+        assert celdas >= 3  # al menos las celdas corregidas
+
+        # Recargar y verificar que persistieron
+        reloaded = self.repo.cargar_registros(
+            self.path, fila_datos_inicio=10, fila_inicio=10, fila_fin=12
+        )
+        assert reloaded[0].folios == "500r-501v"
+        assert reloaded[1].escribano == "RODRIGO"
+        assert reloaded[2].protocolo == "99"
+
+    def test_guardar_registros_no_borra_registros_no_tocados(self):
+        """Solo se sobrescriben columnas mapeadas; el resto del Excel se conserva."""
+        wb = Workbook()
+        ws = wb.active
+        for h in range(HEADER_ROWS):
+            r = 10 - HEADER_ROWS + h
+            ws.cell(row=r, column=1, value="N° de Registro")
+            ws.cell(row=r, column=2, value="Escribano")
+            ws.cell(row=r, column=3, value="N° de Folios")
+            ws.cell(row=r, column=4, value="N° de Prot")
+        ws.cell(row=10, column=5, value="Nota al margen que no es columna")
+        ws.cell(row=10, column=1, value="101")
+        wb.save(self.path)
+
+        records = self.repo.cargar_registros(
+            self.path, fila_datos_inicio=10, fila_inicio=10, fila_fin=10
+        )
+        records[0].titulo = "PODER"
+
+        self.repo.guardar_registros(
+            self.path, fila_datos_inicio=10, records=records
+        )
+
+        from openpyxl import load_workbook
+        wb2 = load_workbook(self.path)
+        ws2 = wb2.worksheets[0]
+        # La celda fuera del mapa de columnas no se tocó
+        assert ws2.cell(row=10, column=5).value == "Nota al margen que no es columna"

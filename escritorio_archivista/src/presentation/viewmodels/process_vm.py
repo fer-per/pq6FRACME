@@ -63,6 +63,8 @@ class FragmentWorker(QRunnable):
                 pdf_path=self._state.pdf_path,
                 output_dir=self._output_dir,
                 acervo_num=self._state.acervo_num,
+                escribano=self._state.escribano,
+                siglo=self._state.siglo,
                 pag_pdf_inicio=self._state.pag_pdf_inicio,
                 segmentos=self._state.segmentos or None,
                 exclusiones=self._state.exclusions or None,
@@ -97,6 +99,21 @@ class ProcessVM(QObject):
             self._state.add_log("ERR", "No hay registros cargados.")
             return
 
+        # Sincronizar el mapeo con la última configuración: recalcula el
+        # pg_pdf de los registros con los parámetros vigentes
+        # (pag_pdf_inicio, segmentos, page_map, exclusiones) para que la
+        # fragmentación se realice con la configuración más reciente.
+        self._state.recalcular_pg_pdf()
+        self._state.records_changed.emit()
+        self._state.add_log(
+            "INFO",
+            "Fragmentando con la configuración actual: "
+            f"pág. inicio {self._state.pag_pdf_inicio}, "
+            f"acervo {self._state.acervo_num or '—'}, "
+            f"escribano {self._state.escribano or '—'}, "
+            f"siglo {self._state.siglo or '—'}.",
+        )
+
         base_dir = self._state.output_dir or DEFAULT_OUTPUT_DIR
         output_dir = resolver_directorio_corrida(base_dir)
         self._state.add_log(
@@ -115,7 +132,6 @@ class ProcessVM(QObject):
         self._thread_pool.start(worker)
 
     def _on_finished(self, result):
-        self._state.records = result.archivos_creados and self._state.records or self._state.records
         self._state.add_log(
             "SUCCESS",
             f"Fragmentación completada: {result.total_exitos} éxitos, "

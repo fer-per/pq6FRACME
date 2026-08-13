@@ -115,6 +115,12 @@ class WorkspaceVM(QObject):
         if result.metadata.get("acervo_detectado"):
             self._state.acervo_num = result.metadata["acervo_detectado"]
 
+        if result.metadata.get("escribano_detectado"):
+            self._state.escribano = result.metadata["escribano_detectado"]
+
+        if result.metadata.get("siglo_detectado"):
+            self._state.siglo = result.metadata["siglo_detectado"]
+
         if self._state.fila_datos_auto:
             if result.records:
                 self._state.fila_fin = max(r.fila for r in result.records)

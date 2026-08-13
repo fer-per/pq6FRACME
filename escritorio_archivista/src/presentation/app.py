@@ -44,6 +44,9 @@ def create_app(argv: list) -> QApplication:
     # Registrar vistas
     _register_views(window, container, state)
 
+    # Arrancar con estado "sin cambios": no hay que guardar nada aún.
+    state.mark_saved()
+
     # Log inicial
     state.add_log("INFO", "Sistema listo. Bienvenido al Escritorio Archivista.")
 

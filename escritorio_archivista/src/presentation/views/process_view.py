@@ -8,7 +8,7 @@ import logging
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QProgressBar, QGroupBox, QFileDialog,
+    QProgressBar, QGroupBox, QFileDialog, QHeaderView,
 )
 from PySide6.QtCore import Qt, QSize, QTimer, QUrl
 from PySide6.QtGui import QIcon, QDesktopServices
@@ -126,6 +126,11 @@ class ProcessView(QWidget):
         self._table = DataTable(
             columns=["Fila", "Registro", "Folios", "Rango PDF", "Estado", "Escribano"],
             field_map=["fila", "registro", "folios", "pg_pdf", "estado", "escribano"],
+        )
+        # Solo esta tabla se adapta al espacio disponible: las columnas se
+        # estiran para llenar el ancho de la vista.
+        self._table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
         )
         table_layout.addWidget(self._table)
         layout.addWidget(table_group, stretch=1)

@@ -142,8 +142,8 @@ class TestFragmentarPDFUseCase:
 
         tmp_dir = tempfile.mkdtemp()
         dest = os.path.join(tmp_dir, "out", "registro.pdf")
-        hierarchy.construir_ruta.side_effect = lambda r, o, a: os.path.join(
-            tmp_dir, "out", f"{r.id}.pdf"
+        hierarchy.construir_ruta.side_effect = lambda *args: os.path.join(
+            tmp_dir, "out", f"{args[0].id}.pdf"
         )
 
         # Folios "001r-002v" → páginas 1-4; "003r-004v" → 5-8; "005r" → 9
@@ -195,8 +195,8 @@ class TestFragmentarPDFUseCase:
         uc = FragmentarPDFUseCase(pdf_service, hierarchy)
 
         tmp_dir = tempfile.mkdtemp()
-        hierarchy.construir_ruta.side_effect = lambda r, o, a: os.path.join(
-            tmp_dir, "out", f"{r.id}.pdf"
+        hierarchy.construir_ruta.side_effect = lambda *args: os.path.join(
+            tmp_dir, "out", f"{args[0].id}.pdf"
         )
 
         records = [

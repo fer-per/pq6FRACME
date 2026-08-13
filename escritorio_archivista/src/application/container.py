@@ -51,6 +51,7 @@ class Container:
         # Acceso directo a servicios de infraestructura (para la presentación)
         self.pdf_service = self._pdf_service
         self.session = self._session_repo
+        self.excel_repo = self._excel_repo
 
         logger.info("Container DI inicializado.")
 

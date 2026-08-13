@@ -428,6 +428,26 @@ class WorkspaceView(QWidget):
         self._table.load_data(records)
         self._count_label.setText(f"{len(records)} registros")
 
+    def refresh_from_state(self):
+        """Refleja el estado cargado (p. ej. una configuración) en Paso 1 y 2
+        y recarga el Excel y PDF con esos parámetros de mapeo."""
+        if self._state.excel_path and os.path.isfile(self._state.excel_path):
+            self._excel_drop.set_file(self._state.excel_path)
+        if self._state.pdf_path and os.path.isfile(self._state.pdf_path):
+            self._pdf_drop.set_file(self._state.pdf_path)
+
+        self._fila_datos_inicio_spin.setValue(self._state.fila_datos_inicio)
+        self._fila_inicio_spin.setValue(self._state.fila_inicio)
+        self._fila_fin_spin.setValue(self._state.fila_fin)
+        self._pag_pdf_spin.setValue(self._state.pag_pdf_inicio)
+        self._folio_inicio_input.setText(self._state.folio_inicio)
+        self._refresh_table()
+
+        if self._state.excel_path and os.path.isfile(self._state.excel_path):
+            self._vm.load_inventory()
+        if self._state.pdf_path and os.path.isfile(self._state.pdf_path):
+            self._vm.set_pdf_path(self._state.pdf_path)
+
     def apply_theme(self, dark: bool):
         """Reaplica los estilos dependientes del tema."""
         self._palette = get_palette(dark)

@@ -47,7 +47,7 @@ class ExcelRepositoryPort(ABC):
                 la lectura a las filas de cabecera.
 
         Returns:
-            Dict con claves: "siglo", "acervo_num", "filepath".
+            Dict con claves: "siglo", "escribano", "acervo_num", "filepath".
         """
         ...
 
@@ -65,5 +65,29 @@ class ExcelRepositoryPort(ABC):
 
         Returns:
             Fila 1-based donde empiezan los datos, o None si no se detecta.
+        """
+        ...
+
+    @abstractmethod
+    def guardar_registros(
+        self,
+        ruta: str,
+        fila_datos_inicio: int,
+        records: List[InventoryRecord],
+    ) -> int:
+        """
+        Escribe de vuelta los valores de los registros en el Excel.
+
+        Solo se sobrescriben las columnas localizadas por el mapa maestro
+        y los registros con ``fila`` válida. Las celdas cuyo valor en el
+        registro está vacío no se tocan.
+
+        Args:
+            ruta: Ruta al archivo .xlsx (se modifica en disco).
+            fila_datos_inicio: Fila 1-based donde empiezan los datos.
+            records: Registros con las correcciones ya aplicadas en memoria.
+
+        Returns:
+            Cantidad de celdas escritas.
         """
         ...

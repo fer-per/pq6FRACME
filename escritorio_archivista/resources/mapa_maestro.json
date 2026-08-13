@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "descripcion": "Archivo maestro de mapeo de datos del inventario. Indica dónde se ubican los metadatos (filas/columnas del encabezado) y cómo mapear las columnas de datos del Excel. Ajustar si cambia la estructura del archivo.",
+  "metadatos": {
+    "siglo": { "fila": 4, "columna": 1 },
+    "escribano": { "fila": 6, "columna": 1 },
+    "acervo": { "fila": 7, "columna": 1 }
+  },
+  "columnas": {
+    "registro": {
+      "aliases": ["n° de registro", "numero de registro", "registro", "id", "expediente"]
+    },
+    "escribano": {
+      "aliases": ["escribano", "notario"]
+    },
+    "protocolo": {
+      "aliases": ["n° de prot", "protocolo", "prot", "tomo"]
+    },
+    "folios": {
+      "aliases": ["n° de folios", "folios", "rango", "paginas"]
+    },
+    "titulo": {
+      "aliases": ["titulo", "escritura", "asunto"],
+      "indice_fallback": 7
+    },
+    "data_topica": {
+      "aliases": ["data top", "lugar", "topica"]
+    },
+    "fecha_inicio": {
+      "aliases": ["fecha inicial", "data cronica 1", "inicial", "inicio"],
+      "indice_fallback": 5
+    },
+    "fecha_fin": {
+      "aliases": ["fecha final", "data cronica 2", "final", "fin"]
+    },
+    "interesado1": {
+      "aliases": ["interesado 1", "interesado"]
+    },
+    "interesado2": {
+      "aliases": ["interesado 2"]
+    },
+    "interesado3": {
+      "aliases": ["interesado 3"]
+    }
+  }
+}

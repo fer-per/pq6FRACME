@@ -7,11 +7,12 @@ y panel lateral de PDF preview como dock widget.
 import logging
 import os
 import re
+import shutil
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QStackedWidget, QSplitter, QDockWidget, QMessageBox,
-    QInputDialog,
+    QInputDialog, QDialogButtonBox, QComboBox,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -50,6 +51,50 @@ def _listar_perfiles() -> list:
     return sorted(
         f[:-5] for f in os.listdir(SESIONES_DIR) if f.endswith(".json")
     )
+
+
+def _archivos_dir(nombre: str) -> str:
+    """Directorio donde se guardan copias del Excel/PDF de un perfil."""
+    return os.path.join(SESIONES_DIR, f"{nombre}_archivos")
+
+
+def _empaquetar_adjuntos(nombre: str, estado: dict) -> dict:
+    """Copia el Excel y PDF cargados junto al perfil.
+
+    Devuelve un dict con ``excel_adjunto``/``pdf_adjunto`` (rutas relativas
+    a ``SESIONES_DIR``) que se guardan en el JSON del perfil.
+    """
+    adjuntos = {}
+    dir_adj = _archivos_dir(nombre)
+    os.makedirs(dir_adj, exist_ok=True)
+    for key, destino_nombre in (
+        ("excel_path", "inventario_cargado.xlsx"),
+        ("pdf_path", "pdf_cargado.pdf"),
+    ):
+        origen = estado.get(key)
+        if not origen or not os.path.isfile(origen):
+            continue
+        destino = os.path.join(dir_adj, destino_nombre)
+        try:
+            shutil.copy2(origen, destino)
+            adjuntos[key.replace("_path", "_adjunto")] = os.path.relpath(
+                destino, SESIONES_DIR
+            )
+        except OSError as e:
+            logger.warning("No se pudo copiar %s: %s", origen, e)
+    return adjuntos
+
+
+def _resolver_adjuntos(data: dict):
+    """Prioriza los adjuntos guardados del perfil sobre las rutas originales."""
+    for key, adj_key in (("excel_path", "excel_adjunto"), ("pdf_path", "pdf_adjunto")):
+        adj = data.get(adj_key)
+        if not adj:
+            continue
+        if not os.path.isabs(adj):
+            adj = os.path.normpath(os.path.join(SESIONES_DIR, adj))
+        if os.path.isfile(adj):
+            data[key] = adj
 
 
 class MainWindow(QMainWindow):
@@ -227,11 +272,15 @@ class MainWindow(QMainWindow):
 
     def _on_save(self):
         """Guarda la configuración actual con un nombre de perfil."""
-        nombre, ok = QInputDialog.getText(
-            self, "Guardar configuración",
-            "Nombre de la configuración:",
-            text=self._state.profile_name or "",
-        )
+        dlg = QInputDialog(self)
+        dlg.setWindowTitle("Guardar configuración")
+        dlg.setLabelText("Nombre de la configuración:")
+        dlg.setTextValue(self._state.profile_name or "")
+        dlg.setOkButtonText("Guardar")
+        dlg.setCancelButtonText("Cancelar")
+        self._style_input_dialog_buttons(dlg)
+        ok = dlg.exec()
+        nombre = dlg.textValue()
         if not ok:
             return
         nombre = nombre.strip()
@@ -248,21 +297,34 @@ class MainWindow(QMainWindow):
 
         ruta = _ruta_perfil(nombre)
         if os.path.exists(ruta):
-            respuesta = QMessageBox.question(
-                self, "Sobrescribir",
+            sobrescribir = QMessageBox(self)
+            sobrescribir.setWindowTitle("Sobrescribir")
+            sobrescribir.setIcon(QMessageBox.Icon.Question)
+            sobrescribir.setText(
                 f"Ya existe la configuración '{nombre}'. ¿Deseás "
-                "sobrescribirla?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                "sobrescribirla?"
             )
-            if respuesta != QMessageBox.StandardButton.Yes:
+            si_btn = sobrescribir.addButton(
+                "Sí", QMessageBox.ButtonRole.YesRole
+            )
+            no_btn = sobrescribir.addButton(
+                "No", QMessageBox.ButtonRole.NoRole
+            )
+            sobrescribir.setDefaultButton(no_btn)
+            self._style_messagebox_buttons(sobrescribir)
+            sobrescribir.exec()
+            if sobrescribir.clickedButton() is not si_btn:
                 return
 
         try:
-            self._container.gestionar_sesion.guardar(
-                ruta, self._state.to_dict()
-            )
+            datos = self._state.to_dict()
+            # Guardar también el Excel y PDF cargados, con los parámetros
+            # de mapeo que ya van en `to_dict`.
+            datos.update(_empaquetar_adjuntos(nombre, datos))
+            self._container.gestionar_sesion.guardar(ruta, datos)
             self._state.profile_name = nombre
             self._header.set_profile_name(nombre)
+            self._state.mark_saved()
             self._state.add_log(
                 "SUCCESS", f"Configuración '{nombre}' guardada exitosamente."
             )
@@ -288,12 +350,21 @@ class MainWindow(QMainWindow):
             return
 
         actual = self._state.profile_name or perfiles[0]
-        nombre, ok = QInputDialog.getItem(
-            self, "Cargar configuración",
-            "Configuración a cargar:",
-            perfiles, editable=False,
-            current=perfiles.index(actual) if actual in perfiles else 0,
-        )
+        dlg = QInputDialog(self)
+        dlg.setWindowTitle("Cargar configuración")
+        dlg.setLabelText("Configuración a cargar:")
+        dlg.setComboBoxItems(perfiles)
+        dlg.setComboBoxEditable(False)
+        combo = dlg.findChild(QComboBox)
+        if combo is not None:
+            combo.setCurrentIndex(
+                perfiles.index(actual) if actual in perfiles else 0
+            )
+        dlg.setOkButtonText("Cargar")
+        dlg.setCancelButtonText("Cancelar")
+        self._style_input_dialog_buttons(dlg)
+        ok = dlg.exec()
+        nombre = dlg.textValue()
         if not ok:
             return
 
@@ -309,12 +380,16 @@ class MainWindow(QMainWindow):
                     f"La configuración '{nombre}' está vacía.",
                 )
                 return
+            # Resolver adjuntos del perfil (copias del Excel/PDF)
+            _resolver_adjuntos(data)
             self._state.from_dict(data)
             self._state.profile_name = nombre
             self._header.set_profile_name(nombre)
             self._state.add_log(
                 "SUCCESS", f"Configuración '{nombre}' cargada exitosamente."
             )
+            # Recargar el Excel y PDF con los parámetros de mapeo guardados
+            self._reload_archivos()
             QMessageBox.information(
                 self, "Configuración cargada",
                 f"La configuración '{nombre}' se cargó correctamente.",
@@ -328,14 +403,20 @@ class MainWindow(QMainWindow):
 
     def _on_new(self):
         """Reinicia el estado para empezar una configuración nueva."""
-        respuesta = QMessageBox.question(
-            self, "Nueva configuración",
+        conf = QMessageBox(self)
+        conf.setWindowTitle("Nueva configuración")
+        conf.setIcon(QMessageBox.Icon.Question)
+        conf.setText(
             "¿Empezar una configuración nueva?\n"
             "Se descartará el estado actual. Las configuraciones guardadas "
-            "no se borran.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            "no se borran."
         )
-        if respuesta != QMessageBox.StandardButton.Yes:
+        si_btn = conf.addButton("Sí", QMessageBox.ButtonRole.YesRole)
+        no_btn = conf.addButton("No", QMessageBox.ButtonRole.NoRole)
+        conf.setDefaultButton(no_btn)
+        self._style_messagebox_buttons(conf)
+        conf.exec()
+        if conf.clickedButton() is not si_btn:
             return
         self._state.reset()
         self._header.set_profile_name("")
@@ -348,6 +429,119 @@ class MainWindow(QMainWindow):
             "Estado reiniciado. Podés comenzar a cargar un nuevo inventario.\n"
             "Usá Guardar para crear otra configuración.",
         )
+
+    def _style_messagebox_buttons(self, box: QMessageBox):
+        """Colorea los botones de un QMessageBox según su funcionalidad.
+
+        - Acción afirmativa/guardar   (Aceptar, Sí, Guardar)   → verde
+        - Acción destructiva          (Salir sin guardar, No)  → rojo
+        - Resto (Cancelar, Cerrar, etc.)                        → neutro
+
+        Los colores se toman de la paleta del tema activo.
+        """
+        for btn in box.buttons():
+            role = box.buttonRole(btn)
+            if role in (
+                QMessageBox.ButtonRole.AcceptRole,
+                QMessageBox.ButtonRole.YesRole,
+                QMessageBox.ButtonRole.ApplyRole,
+            ):
+                btn.setObjectName("btn_confirmar")
+            elif role == QMessageBox.ButtonRole.DestructiveRole:
+                btn.setObjectName("btn_destructivo")
+            else:
+                btn.setObjectName("btn_neutro")
+
+        box.setStyleSheet(self._dialog_button_stylesheet())
+
+    def _style_input_dialog_buttons(self, dialog: QInputDialog):
+        """Colorea los botones de un QInputDialog (Guardar/Cargar/Cancelar)."""
+        bbox = dialog.findChild(QDialogButtonBox)
+        if bbox is None:
+            return
+        ok_btn = bbox.button(QDialogButtonBox.StandardButton.Ok)
+        cancel_btn = bbox.button(QDialogButtonBox.StandardButton.Cancel)
+        if ok_btn is not None:
+            ok_btn.setObjectName("btn_confirmar")
+        if cancel_btn is not None:
+            cancel_btn.setObjectName("btn_neutro")
+        dialog.setStyleSheet(self._dialog_button_stylesheet())
+
+    def _dialog_button_stylesheet(self) -> str:
+        """Hoja de estilo común para botones de diálogos según funcionalidad."""
+        pal = get_palette(self._state.dark_mode)
+        return f"""
+            QPushButton#btn_confirmar {{
+                background-color: {pal['validate_bg']};
+                color: {pal['validate_fg']};
+                border: none; border-radius: 6px;
+                padding: 6px 14px; font-weight: 600;
+            }}
+            QPushButton#btn_confirmar:hover {{
+                background-color: {pal['validate_hover']};
+            }}
+            QPushButton#btn_confirmar:pressed {{
+                background-color: {pal['validate_pressed']};
+            }}
+            QPushButton#btn_destructivo {{
+                background-color: {pal['error']};
+                color: #ffffff;
+                border: none; border-radius: 6px;
+                padding: 6px 14px; font-weight: 600;
+            }}
+            QPushButton#btn_destructivo:hover {{
+                background-color: {pal['error']};
+            }}
+            QPushButton#btn_neutro {{
+                background-color: {pal['surface_container']};
+                color: {pal['text_primary']};
+                border: none; border-radius: 6px;
+                padding: 6px 14px;
+            }}
+            QPushButton#btn_neutro:hover {{
+                background-color: {pal['surface_high']};
+            }}
+        """
+
+    def closeEvent(self, event):
+        """Al cerrar, avisa si la última configuración no está guardada."""
+        if not self._state.has_unsaved_changes():
+            event.accept()
+            return
+
+        respuesta = QMessageBox(self)
+        respuesta.setWindowTitle("Cambios sin guardar")
+        respuesta.setIcon(QMessageBox.Icon.Warning)
+        respuesta.setText(
+            "No guardaste la última configuración.\n\n"
+            "Si cerrás la aplicación se perderá la configuración actual."
+        )
+        guardar_btn = respuesta.addButton(
+            "Guardar y salir", QMessageBox.ButtonRole.AcceptRole
+        )
+        salir_btn = respuesta.addButton(
+            "Salir sin guardar", QMessageBox.ButtonRole.DestructiveRole
+        )
+        cancelar_btn = respuesta.addButton(
+            "Cancelar", QMessageBox.ButtonRole.RejectRole
+        )
+        respuesta.setDefaultButton(guardar_btn)
+        respuesta.setEscapeButton(cancelar_btn)
+        self._style_messagebox_buttons(respuesta)
+        respuesta.exec()
+
+        clicked = respuesta.clickedButton()
+        role = respuesta.buttonRole(clicked)
+        if role == QMessageBox.ButtonRole.AcceptRole:
+            self._on_save()
+            if self._state.has_unsaved_changes():
+                event.ignore()
+            else:
+                event.accept()
+        elif role == QMessageBox.ButtonRole.DestructiveRole:
+            event.accept()
+        else:
+            event.ignore()
 
     def _on_page_changed(self, page: int):
         """Actualiza la página del PDF en el estado (el preview maneja el render)."""
@@ -389,6 +583,24 @@ class MainWindow(QMainWindow):
     def _render_current_page(self):
         """Compat: desplaza la vista previa a la página actual del estado."""
         self._pdf_preview.set_current_page(self._state.pdf_current_page)
+
+    def _reload_archivos(self):
+        """Refleja la configuración cargada en el workspace.
+
+        Actualiza los archivos mostrados (Paso 1), los parámetros de mapeo
+        (Paso 2) y recarga el Excel/PDF con los valores guardados.
+        """
+        idx = self._views.get(ViewId.WORKSPACE)
+        widget = self._stack.widget(idx) if idx is not None else None
+        if widget is None:
+            return
+        refresh = getattr(widget, "refresh_from_state", None)
+        if refresh is None:
+            return
+        try:
+            refresh()
+        except Exception as e:
+            self._state.add_log("ERR", f"No se pudieron recargar los archivos: {e}")
 
     @property
     def pdf_preview(self) -> PDFPreview:

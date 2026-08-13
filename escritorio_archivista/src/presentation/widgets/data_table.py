@@ -65,10 +65,10 @@ class DataTable(QTableWidget):
 
         # Header
         header = self.horizontalHeader()
-        header.setStretchLastSection(True)
         header.setFont(get_font("body_sm_bold"))
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        header.setMinimumSectionSize(60)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header.setMinimumSectionSize(40)
+        header.setDefaultAlignment(Qt.AlignCenter)
 
         # Señales
         self.cellClicked.connect(self._on_cell_clicked)
@@ -100,6 +100,7 @@ class DataTable(QTableWidget):
 
                 cell = QTableWidgetItem(str(value))
                 cell.setFont(get_font("body_sm"))
+                cell.setTextAlignment(Qt.AlignCenter)
 
                 # Colorear filas con estado REVISAR
                 if hasattr(item, 'estado') and item.estado == "REVISAR":

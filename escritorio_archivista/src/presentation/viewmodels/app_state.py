@@ -47,6 +47,7 @@ class AppStateVM(QObject):
         self._pdf_path: Optional[str] = None
         self._output_dir: str = DEFAULT_OUTPUT_DIR
         self._profile_name: Optional[str] = None
+        self._saved_snapshot: Optional[dict] = None
 
         # ─── Datos del inventario ────────────────────────────
         self._records: List[InventoryRecord] = []
@@ -76,6 +77,7 @@ class AppStateVM(QObject):
         # ─── Metadatos ───────────────────────────────────────
         self._acervo_num: str = "7"
         self._siglo: str = ""
+        self._escribano: str = ""
 
         # ─── Tema ────────────────────────────────────────────
         self._dark_mode: bool = False
@@ -280,6 +282,22 @@ class AppStateVM(QObject):
         self._acervo_num = value
 
     @property
+    def siglo(self) -> str:
+        return self._siglo
+
+    @siglo.setter
+    def siglo(self, value: str):
+        self._siglo = value or ""
+
+    @property
+    def escribano(self) -> str:
+        return self._escribano
+
+    @escribano.setter
+    def escribano(self, value: str):
+        self._escribano = value or ""
+
+    @property
     def dark_mode(self) -> bool:
         return self._dark_mode
 
@@ -346,8 +364,11 @@ class AppStateVM(QObject):
             "fila_fin": self._fila_fin,
             "folio_inicio": self._folio_inicio,
             "pag_pdf_inicio": self._pag_pdf_inicio,
+            "fila_datos_auto": self._fila_datos_auto,
             "pdf_total_pages": self._pdf_total_pages,
             "acervo_num": self._acervo_num,
+            "siglo": self._siglo,
+            "escribano": self._escribano,
             "segmentos": self._segmentos,
             "overrides": self._overrides,
             "page_map": self._page_map,
@@ -368,8 +389,11 @@ class AppStateVM(QObject):
         self._fila_fin = data.get("fila_fin", 0)
         self._folio_inicio = data.get("folio_inicio", "")
         self._pag_pdf_inicio = data.get("pag_pdf_inicio", 0)
+        self._fila_datos_auto = bool(data.get("fila_datos_auto", True))
         self._pdf_total_pages = data.get("pdf_total_pages", 0)
         self._acervo_num = data.get("acervo_num", "7")
+        self._siglo = data.get("siglo", "")
+        self._escribano = data.get("escribano", "")
         self._segmentos = data.get("segmentos", [])
         self._overrides = data.get("overrides", {})
         self._page_map = data.get("page_map", {})
@@ -391,6 +415,17 @@ class AppStateVM(QObject):
         self.pdf_changed.emit()
         self.config_changed.emit()
         self.session_changed.emit()
+
+        # Al restaurar un perfil, el estado coincide con lo guardado en disco.
+        self.mark_saved()
+
+    def mark_saved(self):
+        """Registra el estado actual como la última configuración guardada."""
+        self._saved_snapshot = self.to_dict()
+
+    def has_unsaved_changes(self) -> bool:
+        """True si la configuración actual difiere de la última guardada."""
+        return self._saved_snapshot is None or self.to_dict() != self._saved_snapshot
 
     def reset(self):
         """Reinicia el estado a los valores por defecto (nueva configuración).
@@ -422,6 +457,7 @@ class AppStateVM(QObject):
         self._pdf_zoom = 100
         self._acervo_num = "7"
         self._siglo = ""
+        self._escribano = ""
 
         # Emitir todas las señales
         self.records_changed.emit()
@@ -431,3 +467,5 @@ class AppStateVM(QObject):
         self.pdf_changed.emit()
         self.config_changed.emit()
         self.session_changed.emit()
+
+        self.mark_saved()
