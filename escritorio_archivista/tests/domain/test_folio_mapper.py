@@ -197,3 +197,45 @@ class TestMapperFromConfig:
         mapper = mapper_from_config(pag_pdf_inicio=1, total_pdf_pages=4)
         mapper.start_sequence()
         assert mapper.folio_str_to_pdf_pages("001r-001v") == [1, 2]
+
+
+class TestManualOverrideConExclusion:
+    """El rango manual se interpreta en la sucesión renumerada y respeta
+    las páginas descartadas en el editor PDF."""
+
+    def _mapper(self, active_pages, total):
+        return mapper_from_config(
+            pag_pdf_inicio=1, active_pages=active_pages, total_pdf_pages=total
+        )
+
+    def test_manual_no_reintroduce_pagina_excluida(self):
+        """Pág. física 2 excluida; manual '1-2' (sucesión) → [1,3]."""
+        mapper = self._mapper([1, 3, 4], 4)
+        mapper.start_sequence()
+        assert mapper.folio_str_to_pdf_pages("001r-001v", override="1-2") == [1, 3]
+
+    def test_sucesion_continua_despues_del_manual(self):
+        """Tras el manual, el contador sigue desde la última página física."""
+        mapper = self._mapper([1, 3, 4], 4)
+        mapper.start_sequence()
+        assert mapper.folio_str_to_pdf_pages("001r-001v", override="1-2") == [1, 3]
+        assert mapper.folio_str_to_pdf_pages("002r-002v") == [4, 5]
+
+    def test_manual_rango_largo_con_exclusion(self):
+        """Rango manual de varias páginas traducido contra la sucesión activa."""
+        active = [1, 3, 4, 5, 6, 7]
+        mapper = self._mapper(active, 7)
+        mapper.start_sequence()
+        assert mapper.folio_str_to_pdf_pages("001r-003v", override="2-5") == [3, 4, 5, 6]
+
+    def test_manual_sin_exclusion_se_mantiene_literal(self):
+        """Sin páginas descartadas, el rango manual es literal (compatibilidad)."""
+        mapper = mapper_from_config(pag_pdf_inicio=1)
+        mapper.start_sequence()
+        assert mapper.folio_str_to_pdf_pages("001r-001v", override="5-6") == [5, 6]
+
+    def test_format_pages_preserva_huecos(self):
+        assert FolioMapper.format_pages([1, 5, 6, 7]) == "1,5-7"
+        assert FolioMapper.format_pages([373, 374, 375]) == "373-375"
+        assert FolioMapper.format_pages([7]) == "7"
+        assert FolioMapper.format_pages([]) is None

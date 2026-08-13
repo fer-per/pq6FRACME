@@ -89,6 +89,9 @@ class AnalyzerVM(QObject):
                     f"Corrección aplicada a {record_id} ({field}): {new_value}"
                 )
                 break
+        # Recalcular pg_pdf de inmediato (respeta pg_pdf_manual) para que la
+        # grilla muestre el rango aplicado sin esperar el análisis asíncrono.
+        self._state.recalcular_pg_pdf()
         self._state.records_changed.emit()
         self.correction_applied.emit()
         self.guardar_en_excel()
@@ -119,6 +122,9 @@ class AnalyzerVM(QObject):
                         f"en {record_id}"
                     )
                 break
+        # Recalcular pg_pdf de inmediato (respeta pg_pdf_manual) para que la
+        # grilla muestre el rango aplicado sin esperar el análisis asíncrono.
+        self._state.recalcular_pg_pdf()
         self._state.records_changed.emit()
         self.correction_applied.emit()
         self.guardar_en_excel()
@@ -172,6 +178,9 @@ class AnalyzerVM(QObject):
                 self._state.add_log("SUCCESS", f"Corrección aplicada a {record_id}: {detalle}")
                 break
 
+        # Recalcular pg_pdf de inmediato (respeta pg_pdf_manual) para que la
+        # grilla muestre el rango aplicado sin esperar el análisis asíncrono.
+        self._state.recalcular_pg_pdf()
         self._state.records_changed.emit()
         self.correction_applied.emit()
         self.guardar_en_excel()

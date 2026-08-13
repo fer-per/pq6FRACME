@@ -342,10 +342,10 @@ class AppStateVM(QObject):
         mapper.start_sequence()
         for record in self._records:
             if record.pg_pdf_manual.strip():
-                pages = mapper.folio_str_to_pdf_pages(
+                pdf_range = mapper.folio_str_to_pdf_range(
                     record.folios, override=record.pg_pdf_manual
                 )
-                record.pg_pdf = record.pg_pdf_manual.strip() if pages else ""
+                record.pg_pdf = pdf_range or ""
             else:
                 pdf_range = mapper.folio_str_to_pdf_range(
                     record.folios, share_last=record.comparte_hoja

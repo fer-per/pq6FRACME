@@ -44,6 +44,7 @@ class FragmentarPDFUseCase:
         page_map: Optional[dict] = None,
         active_pages: Optional[list] = None,
         total_pdf_pages: int = 0,
+        incidencias_validadas: Optional[set] = None,
         on_progress: Optional[callable] = None,
     ) -> ResultadoFragmentacion:
         """
@@ -51,7 +52,7 @@ class FragmentarPDFUseCase:
 
         1. Crea FolioMapper
         2. Para cada registro:
-           a. Si estado == REVISAR → omitir
+           a. Si estado == REVISAR y su incidencia no fue validada → omitir
            b. Construir ruta jerárquica
            c. Calcular páginas PDF
            d. Extraer páginas
@@ -85,8 +86,12 @@ class FragmentarPDFUseCase:
                 if on_progress:
                     on_progress(i + 1, total, record.id)
 
-                # Omitir registros marcados como REVISAR
-                if record.estado == "REVISAR":
+                # Omitir registros marcados como REVISAR cuya incidencia no
+                # fue validada (validados = revisado pero aceptado).
+                if (
+                    record.estado == "REVISAR"
+                    and record.id not in (incidencias_validadas or set())
+                ):
                     pendientes.append({
                         "ID": record.id,
                         "Fila": record.fila,

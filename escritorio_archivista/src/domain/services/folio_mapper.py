@@ -49,9 +49,11 @@ class FolioMapper:
         segmentos: Optional[List[Segmento]] = None,
         ignoradas: Optional[List[int]] = None,
         page_map: Optional[dict] = None,
+        active_pages: Optional[list] = None,
     ):
         self.page_map = page_map or {}
         self.pag_pdf_inicio = pag_pdf_inicio
+        self._active_sequence = sorted(active_pages) if active_pages else None
 
         # Si hay page_map, traducir pag_pdf_inicio al espacio original
         if page_map:
@@ -111,6 +113,9 @@ class FolioMapper:
         if override:
             pages = self._parse_manual_pages(override)
             if pages:
+                pages = self._translate_manual_pages(pages)
+                if not pages:
+                    return None
                 self.folio_page_counter = pages[-1] + 1
                 self._last_used_page = pages[-1]
                 return pages
@@ -180,6 +185,28 @@ class FolioMapper:
             return None
         return pages
 
+    def _translate_manual_pages(self, pages: List[int]) -> Optional[List[int]]:
+        """Traduce páginas manuales (sucesión renumerada) a páginas físicas.
+
+        Cuando el usuario excluye hojas en el editor PDF, la sucesión visible
+        se renumera (1..N sobre las páginas activas). Un rango manual como
+        "372-374" está en esa numeración renumerada; aquí se traduce a las
+        páginas físicas reales saltando las excluidas, para que el rango no
+        reintroduzca una hoja descartada y la sucesión posterior se mantenga.
+        """
+        if not self._active_sequence:
+            if self.page_map:
+                inverse = {np: op for op, np in self.page_map.items() if np is not None}
+                return [inverse.get(p, p) for p in pages]
+            return pages
+        result = []
+        for p in pages:
+            if 1 <= p <= len(self._active_sequence):
+                result.append(self._active_sequence[p - 1])
+            else:
+                result.append(p)
+        return result
+
     def folio_str_to_pdf_range(
         self,
         folio_str: str,
@@ -190,11 +217,34 @@ class FolioMapper:
         pages = self.folio_str_to_pdf_pages(
             folio_str, share_last=share_last, override=override
         )
+        return self.format_pages(pages)
+
+    @staticmethod
+    def format_pages(pages: Optional[List[int]]) -> Optional[str]:
+        """Formatea una lista de páginas a string compacto preservando huecos.
+
+        [373,374,375] -> "373-375"; [1,5,6,7] -> "1,5-7"; [] -> None.
+        """
         if not pages:
             return None
         if len(pages) == 1:
             return str(pages[0])
-        return f"{pages[0]}-{pages[-1]}"
+        partes = []
+        inicio = prev = pages[0]
+        for p in pages[1:]:
+            if p == prev + 1:
+                prev = p
+                continue
+            if inicio == prev:
+                partes.append(str(inicio))
+            else:
+                partes.append(f"{inicio}-{prev}")
+            inicio = prev = p
+        if inicio == prev:
+            partes.append(str(inicio))
+        else:
+            partes.append(f"{inicio}-{prev}")
+        return ",".join(partes)
 
     def max_pdf_page(self, records: list) -> int:
         """Calcula la página PDF máxima requerida.
@@ -282,4 +332,5 @@ def mapper_from_config(
         segmentos=segmentos_objs,
         ignoradas=ignoradas,
         page_map=page_map,
+        active_pages=active_pages,
     )

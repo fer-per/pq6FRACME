@@ -443,7 +443,15 @@ class WorkspaceView(QWidget):
         self._folio_inicio_input.setText(self._state.folio_inicio)
         self._refresh_table()
 
-        if self._state.excel_path and os.path.isfile(self._state.excel_path):
+        # Recargar el inventario desde el Excel solo si no hay registros
+        # restaurados de la sesión guardada. Cargar de nuevo crearía
+        # registros SIN las correcciones manuales (pg_pdf_manual,
+        # comparte_hoja, estados) y la fragmentación generaría páginas viejas.
+        if (
+            self._state.excel_path
+            and os.path.isfile(self._state.excel_path)
+            and not self._state.records
+        ):
             self._vm.load_inventory()
         if self._state.pdf_path and os.path.isfile(self._state.pdf_path):
             self._vm.set_pdf_path(self._state.pdf_path)

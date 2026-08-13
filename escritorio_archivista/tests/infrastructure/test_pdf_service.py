@@ -188,6 +188,39 @@ class TestFragmentarPDFUseCase:
         ]
         assert extraido_c == [[9]]
 
+    def test_revisar_validado_se_fragmenta(self):
+        """Un registro REVISAR cuya incidencia fue validada se fragmenta."""
+        pdf_service = MagicMock()
+        hierarchy = MagicMock()
+        uc = FragmentarPDFUseCase(pdf_service, hierarchy)
+
+        tmp_dir = tempfile.mkdtemp()
+        hierarchy.construir_ruta.side_effect = lambda *args: os.path.join(
+            tmp_dir, "out", f"{args[0].id}.pdf"
+        )
+
+        records = [
+            InventoryRecord(
+                id="#0002", fila=11, registro="002", escribano="García",
+                protocolo="1", folios="003r-004v", pg_pdf="5-8",
+                titulo="B", estado="REVISAR",
+            ),
+        ]
+
+        result = uc.ejecutar(
+            records=records,
+            pdf_path="maestro.pdf",
+            output_dir=tmp_dir,
+            acervo_num="7",
+            pag_pdf_inicio=1,
+            incidencias_validadas={"#0002"},
+        )
+
+        assert result.total_exitos == 1
+        assert result.metadata["pendientes"] == 0
+        pdf_service.extraer_paginas.assert_called_once()
+        assert records[0].estado == "FRAGMENTADO"
+
     def test_sin_folio_sin_rango_manual_va_a_pendientes_sin_desplazar(self):
         """Un registro S/F sin páginas manuales se omite y no desalinea los demás."""
         pdf_service = MagicMock()

@@ -126,15 +126,28 @@ class FieldCorrectionModal(QDialog):
         self._share_check.setChecked(bool(self._record.comparte_hoja))
         group_layout.addWidget(self._share_check)
 
-        group_layout.addSpacing(6)
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Pág. PDF manual (vacío = automático):"))
+        group_layout.addSpacing(8)
+        group_layout.addWidget(QLabel("Pág. PDF actual:"))
+        actual_label = QLabel(self._record.pg_pdf or "—")
+        actual_label.setFont(get_font("mono_bold"))
+        actual_label.setStyleSheet(
+            f"background-color: {self._palette['error_bg']}; "
+            f"color: {self._palette['error']}; "
+            f"padding: 8px; border-radius: 6px;"
+        )
+        group_layout.addWidget(actual_label)
+
+        group_layout.addSpacing(8)
+        group_layout.addWidget(QLabel("Nuevo valor (vacío = automático):"))
         self._manual_input = QLineEdit(self._record.pg_pdf_manual)
         self._manual_input.setPlaceholderText("ej. 140-149")
-        self._manual_input.setFixedWidth(160)
-        row.addWidget(self._manual_input)
-        row.addStretch()
-        group_layout.addLayout(row)
+        self._manual_input.setFont(get_font("mono_bold"))
+        self._manual_input.setStyleSheet(
+            f"background-color: {self._palette['surface']}; "
+            f"color: {self._palette['text_primary']}; "
+            f"padding: 8px; border-radius: 6px;"
+        )
+        group_layout.addWidget(self._manual_input)
 
         hint = QLabel(
             "Si el escrito termina a mitad de una hoja y el siguiente "
