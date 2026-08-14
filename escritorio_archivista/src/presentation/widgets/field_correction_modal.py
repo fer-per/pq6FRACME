@@ -140,7 +140,7 @@ class FieldCorrectionModal(QDialog):
         group_layout.addSpacing(8)
         group_layout.addWidget(QLabel("Nuevo valor (vacío = automático):"))
         self._manual_input = QLineEdit(self._record.pg_pdf_manual)
-        self._manual_input.setPlaceholderText("ej. 140-149")
+        self._manual_input.setPlaceholderText("ej. 140-149  (pág. físicas del PDF)")
         self._manual_input.setFont(get_font("mono_bold"))
         self._manual_input.setStyleSheet(
             f"background-color: {self._palette['surface']}; "
@@ -150,10 +150,13 @@ class FieldCorrectionModal(QDialog):
         group_layout.addWidget(self._manual_input)
 
         hint = QLabel(
-            "Si el escrito termina a mitad de una hoja y el siguiente "
-            "continúa en la misma, marca la casilla para que esa hoja "
-            "quede incluida en ambos fragmentos."
+            "Ingresá el rango usando la misma numeración que muestra la columna "
+            "'Pág. PDF' de la grilla (ya descuenta las hojas excluidas en el "
+            "editor PDF). Si el folio empieza en la hoja 529 de esa columna, "
+            "ingresá '529'. Dejá el campo vacío para que el sistema calcule "
+            "automáticamente."
         )
+
         hint.setWordWrap(True)
         hint.setFont(get_font("body_xs"))
         hint.setStyleSheet(f"color: {self._palette['text_secondary']};")

@@ -93,9 +93,11 @@ class FolioMapper:
         Convierte un string de folio a lista de páginas PDF reales.
 
         Parámetros opcionales (usados en la fragmentación):
-        - ``override``: si se provee un rango de páginas PDF manual (ej.
-          "140-145"), se usan esas páginas literalmente, ignorando el
-          cálculo secuencial.
+        - ``override``: rango en **posición renumerada** (la misma numeración
+          que muestra la columna ``pg_pdf`` de la grilla, resultante de
+          descartar las hojas excluidas). Se traduce internamente a páginas
+          físicas usando ``_active_sequence``. Sin exclusiones activas, el
+          rango se usa literalmente como páginas físicas directas.
         - ``share_last``: si es True, el registro arranca en la misma página
           donde terminó el registro anterior (comparte la hoja PDF).
 
@@ -116,6 +118,8 @@ class FolioMapper:
                 pages = self._translate_manual_pages(pages)
                 if not pages:
                     return None
+                # El contador avanza al siguiente número físico; el algoritmo
+                # normal se encargará de saltar las ignoradas si las hubiera.
                 self.folio_page_counter = pages[-1] + 1
                 self._last_used_page = pages[-1]
                 return pages
@@ -186,26 +190,25 @@ class FolioMapper:
         return pages
 
     def _translate_manual_pages(self, pages: List[int]) -> Optional[List[int]]:
-        """Traduce páginas manuales (sucesión renumerada) a páginas físicas.
+        """Valida páginas manuales (físicas) contra las páginas activas del editor PDF.
 
-        Cuando el usuario excluye hojas en el editor PDF, la sucesión visible
-        se renumera (1..N sobre las páginas activas). Un rango manual como
-        "372-374" está en esa numeración renumerada; aquí se traduce a las
-        páginas físicas reales saltando las excluidas, para que el rango no
-        reintroduzca una hoja descartada y la sucesión posterior se mantenga.
+        El usuario ingresa el rango como **páginas físicas** del PDF: el mismo
+        número que aparece en la columna ``pg_pdf`` de la grilla y en lectores
+        externos (Adobe Reader, etc.). Esta función filtra las páginas que hayan
+        sido excluidas en el editor, para que no se reintroduzcan hojas
+        descartadas accidentalmente.
+
+        Si no hay ``active_sequence`` (el editor PDF no está activo), el rango
+        se trata como literal para compatibilidad con el flujo sin exclusiones.
         """
         if not self._active_sequence:
             if self.page_map:
                 inverse = {np: op for op, np in self.page_map.items() if np is not None}
                 return [inverse.get(p, p) for p in pages]
             return pages
-        result = []
-        for p in pages:
-            if 1 <= p <= len(self._active_sequence):
-                result.append(self._active_sequence[p - 1])
-            else:
-                result.append(p)
-        return result
+        active_set = set(self._active_sequence)
+        result = [p for p in pages if p in active_set]
+        return result if result else None
 
     def folio_str_to_pdf_range(
         self,

@@ -78,8 +78,16 @@ class CargarInventarioUseCase:
         # 4. Asignar pg_pdf
         mapper.start_sequence()
         for record in records:
-            pdf_range = mapper.folio_str_to_pdf_range(record.folios)
-            record.pg_pdf = pdf_range or ""
+            if record.pg_pdf_manual.strip():
+                pdf_range = mapper.folio_str_to_pdf_range(
+                    record.folios, override=record.pg_pdf_manual
+                )
+                record.pg_pdf = pdf_range or ""
+            else:
+                pdf_range = mapper.folio_str_to_pdf_range(
+                    record.folios, share_last=record.comparte_hoja
+                )
+                record.pg_pdf = pdf_range or ""
 
         # 5. Analizar folios
         analysis = analizar_folios(records, exclusiones)

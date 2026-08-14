@@ -102,7 +102,19 @@ class WorkspaceVM(QObject):
 
     def _on_load_finished(self, result):
         """Callback cuando el inventario termina de cargarse."""
+        if self._state.records:
+            prev_by_fila = {r.fila: r for r in self._state.records if r.fila}
+            for rec in result.records:
+                if rec.fila in prev_by_fila:
+                    prev = prev_by_fila[rec.fila]
+                    if prev.pg_pdf_manual:
+                        rec.pg_pdf_manual = prev.pg_pdf_manual
+                    if prev.comparte_hoja:
+                        rec.comparte_hoja = prev.comparte_hoja
+                    if prev.estado:
+                        rec.estado = prev.estado
         self._state.records = result.records
+        self._state.recalcular_pg_pdf()
         self._state.suggestions = result.suggestions
 
         # Mapeo automático: expone el rango real detectado en el Excel.
