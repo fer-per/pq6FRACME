@@ -150,6 +150,9 @@ class ProcessView(QWidget):
             return
         try:
             first_page = int(record.pg_pdf.split('-')[0])
+            # pg_pdf es la posición renumerada (con editor activo) o la
+            # página física (idéntica a la posición sin editor): navegar
+            # directo a la vista previa.
             self._state.pdf_current_page = first_page
             main_window = self.window()
             if hasattr(main_window, '_render_current_page'):
@@ -194,10 +197,22 @@ class ProcessView(QWidget):
     def _on_finished(self, result):
         self._fragment_btn.setText("\u2713 Completado")
         self._progress.setValue(100)
-        self._status_label.setText(
-            f"\u2713 {result.total_exitos} fragmentos creados, "
-            f"{result.total_fallos} errores."
-        )
+
+        total = result.metadata.get("total_registros", 0)
+        pendientes = result.metadata.get("pendientes", 0)
+        lineas = [f"\u2713 Fragmentación finalizada ({total} registros procesados)"]
+        lineas.append(f"Fragmentos creados: {result.total_exitos}")
+        if result.total_fallos:
+            lineas.append(f"Errores: {result.total_fallos}")
+            if result.errores:
+                lineas.append(f"  \u2192 {result.errores[0]}")
+        if pendientes:
+            lineas.append(
+                f"Registros pendientes (CSV en /logs): {pendientes}"
+            )
+
+        self._status_label.setText("\n".join(lineas))
+        self._status_label.setWordWrap(True)
 
         QTimer.singleShot(3000, self._reset_button)
         self._refresh_table()
@@ -206,6 +221,8 @@ class ProcessView(QWidget):
         self._fragment_btn.setText("\u2717 Error")
         self._fragment_btn.setEnabled(True)
         self._progress.setVisible(False)
+        self._status_label.setText(f"\u2717 Error: {error_msg}")
+        self._status_label.setWordWrap(True)
 
         QTimer.singleShot(3000, self._reset_button)
 

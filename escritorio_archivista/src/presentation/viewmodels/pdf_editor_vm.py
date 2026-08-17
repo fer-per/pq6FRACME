@@ -70,7 +70,6 @@ class PDFEditorVM(QObject):
     def save_config(self):
         """Genera el page_map desde las páginas activas y lo guarda en el estado."""
         self._update_page_map()
-        self._state.recalcular_pg_pdf()
         n = len(self.get_active_pages())
         self._state.add_log(
             "SUCCESS", f"Configuración de PDF guardada: {n} páginas activas."
@@ -92,6 +91,9 @@ class PDFEditorVM(QObject):
             page_map[original_page] = new_idx
         self._state.page_map = page_map
         self._state.recalcular_pg_pdf()
+        # Las tablas muestran el mapeo folio → página (pg_pdf) y deben
+        # reflejar de inmediato las exclusiones/reordenamientos del editor.
+        self._state.records_changed.emit()
 
     def _save_undo(self):
         self._undo_stack.append(self.get_active_pages())

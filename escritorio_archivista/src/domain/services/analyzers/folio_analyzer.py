@@ -16,7 +16,13 @@ from src.domain.entities import (
     InventoryRecord,
     ExclusionRule,
 )
-from src.domain.services.folio_parser import parse_folios, folio_to_int, es_sin_folio
+from src.domain.services.folio_parser import (
+    parse_folios,
+    folio_to_int,
+    int_to_folio,
+    format_folio,
+    es_sin_folio,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -158,11 +164,12 @@ def analizar_folios(
                     fila=record.fila,
                     tipo="SALTO",
                     descripcion=(
-                        f"Salto de secuencia: se esperaba folio "
-                        f"{expected_next_int} pero se encontró {desde_int}."
+                        f"Salto de secuencia: se esperaba el folio "
+                        f"{_format_folio_int(expected_next_int)} pero se "
+                        f"encontró {_format_folio_int(desde_int)}."
                     ),
                     valor_actual=record.folios,
-                    valor_esperado=f"Folio int {expected_next_int}",
+                    valor_esperado=f"Folio {_format_folio_int(expected_next_int)}",
                     fatal=False,
                 ))
 
@@ -184,6 +191,12 @@ def analizar_folios(
             "revisar": len(errores),
         },
     )
+
+
+def _format_folio_int(n: int) -> str:
+    """Formatea un entero de folio como '003r'/'004v' (con recto/verso)."""
+    num, cara = int_to_folio(n)
+    return format_folio(num, cara)
 
 
 def _salto_aprobado(

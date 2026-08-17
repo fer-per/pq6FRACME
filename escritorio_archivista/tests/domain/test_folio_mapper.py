@@ -180,7 +180,8 @@ class TestMapperFromConfig:
         assert mapper.max_pdf_page([r1, r2, r3]) == 5
 
     def test_paginas_descartadas_no_cuentan(self):
-        """Una página descartada en el editor PDF se salta y no cuenta."""
+        """Una página descartada en el editor PDF no cuenta: la secuencia se
+        renumeriza en posiciones (1,2,3...) como muestra el editor."""
         # PDF físico 1..4 donde la 2 es duplicada; el usuario la descarta
         mapper = mapper_from_config(
             pag_pdf_inicio=1,
@@ -188,10 +189,10 @@ class TestMapperFromConfig:
             total_pdf_pages=4,
         )
         mapper.start_sequence()
-        # 1r→1, 1v→skip 2 →3
-        assert mapper.folio_str_to_pdf_pages("001r-001v") == [1, 3]
-        # 2r→4, 2v→5
-        assert mapper.folio_str_to_pdf_pages("002r-002v") == [4, 5]
+        # 1r→pos 1, 1v→pos 2 (la 2 física deja de existir en la secuencia)
+        assert mapper.folio_str_to_pdf_pages("001r-001v") == [1, 2]
+        # 2r→pos 3; 2v→pos 4 (fuera de las 3 activas) → no mapea
+        assert mapper.folio_str_to_pdf_pages("002r-002v") == [3]
 
     def test_sin_paginas_activas_no_ignora(self):
         mapper = mapper_from_config(pag_pdf_inicio=1, total_pdf_pages=4)
@@ -199,13 +200,44 @@ class TestMapperFromConfig:
         assert mapper.folio_str_to_pdf_pages("001r-001v") == [1, 2]
 
 
-class TestManualOverrideConExclusion:
-    """El rango manual se interpreta como páginas FÍSICAS del PDF.
+# ─── Límite de hojas del PDF ────────────────────────────────
 
-    El usuario ingresa el número de página física tal como aparece en la
-    columna pg_pdf y en el visor del PDF. Si dentro del rango manual hay
-    páginas que fueron excluidas en el editor PDF, estas se filtran
-    automáticamente para no reintroducirlas.
+class TestTopePaginasPDF:
+    """El mapeo folio → página respeta el total de hojas del PDF cargado."""
+
+    def test_sin_pdf_no_mapea(self):
+        """Sin PDF cargado (total 0) no hay mapeo a páginas."""
+        mapper = mapper_from_config(pag_pdf_inicio=1, total_pdf_pages=0)
+        mapper.start_sequence()
+        assert mapper.folio_str_to_pdf_pages("001r-001v") is None
+        assert mapper.folio_str_to_pdf_range("001r-001v") is None
+
+    def test_sin_pdf_no_mapea_rango_manual(self):
+        """Sin PDF, ni siquiera un rango manual resuelve a páginas."""
+        mapper = mapper_from_config(pag_pdf_inicio=1, total_pdf_pages=0)
+        mapper.start_sequence()
+        assert mapper.folio_str_to_pdf_pages("001r-001v", override="5-6") is None
+
+    def test_mapeo_limitado_al_total_de_hojas(self):
+        """El mapeo no supera la última hoja del PDF."""
+        mapper = mapper_from_config(pag_pdf_inicio=1, total_pdf_pages=3)
+        mapper.start_sequence()
+        assert mapper.folio_str_to_pdf_pages("001r-002r") == [1, 2, 3]
+        # Los folios siguientes caerían en las hojas 4,5 → fuera del PDF
+        assert mapper.folio_str_to_pdf_range("002v-003r") is None
+
+    def test_mapeo_limitado_con_offset(self):
+        """Con offset, el tope sigue aplicando sobre el total del PDF."""
+        mapper = mapper_from_config(pag_pdf_inicio=660, total_pdf_pages=660)
+        mapper.start_sequence()
+        assert mapper.folio_str_to_pdf_pages("001r-001v") == [660]
+        assert mapper.folio_str_to_pdf_range("002r-002v") is None
+
+
+class TestManualOverrideConExclusion:
+    """El rango manual (override) con editor PDF activo se interpreta como
+    POSICIÓN renumerada (1,2,3...), la numeración que muestra la columna
+    pg_pdf tras descartar/reordenar hojas.
     """
 
     def _mapper(self, active_pages, total):
@@ -213,52 +245,44 @@ class TestManualOverrideConExclusion:
             pag_pdf_inicio=1, active_pages=active_pages, total_pdf_pages=total
         )
 
-    def test_manual_no_reintroduce_pagina_excluida(self):
-        """Pág. física 2 excluida; override '1-2' (físicas) → [1] (2 se filtra)."""
+    def test_manual_con_posiciones_renumeradas(self):
+        """Override '1-2' → posiciones [1,2] (la 2 física ya no existe)."""
         mapper = self._mapper([1, 3, 4], 4)
         mapper.start_sequence()
-        assert mapper.folio_str_to_pdf_pages("001r-001v", override="1-2") == [1]
-        assert mapper.folio_str_to_pdf_pages("001r-001v", override="1-3") == [1, 3]
+        assert mapper.folio_str_to_pdf_pages("001r-001v", override="1-2") == [1, 2]
+        assert mapper.folio_str_to_pdf_pages("001r-001v", override="1-3") == [1, 2, 3]
 
     def test_manual_sin_exclusiones_es_literal(self):
-        """Override '3-4' (físicas válidas) → [3, 4]."""
+        """Override '3-4' (posiciones válidas) → [3, 4]."""
         mapper = self._mapper([1, 3, 4, 5], 5)
         mapper.start_sequence()
         assert mapper.folio_str_to_pdf_pages("001r-001v", override="3-4") == [3, 4]
 
     def test_sucesion_continua_despues_del_manual(self):
-        """Tras override físico '3-4', el contador sigue desde 5 (física)."""
+        """Tras override '3-4', el contador sigue desde la posición 5."""
         mapper = self._mapper([1, 3, 4, 5, 6], 6)
         mapper.start_sequence()
         assert mapper.folio_str_to_pdf_pages("001r-001v", override="3-4") == [3, 4]
-        assert mapper.folio_str_to_pdf_pages("002r-002v") == [5, 6]
+        # pos 5 disponible; pos 6 está fuera de las 5 activas
+        assert mapper.folio_str_to_pdf_pages("002r-002v") == [5]
 
-    def test_sucesion_continua_y_salta_excluidas(self):
-        """Tras override, el algoritmo normal sigue saltando las excluidas."""
-        # active = [1, 2, 3, 5, 6], ignoradas = {4}
-        # override '1-3' → físicas [1, 2, 3], counter pasa a 4
-        # siguiente folio: counter=4 está en ignoradas → salta → físico 5 → [5, 6]
+    def test_sucesion_continua_al_final_de_la_secuencia(self):
+        """Tras override, el algoritmo normal continúa con las posiciones."""
         mapper = self._mapper([1, 2, 3, 5, 6], 6)
         mapper.start_sequence()
         assert mapper.folio_str_to_pdf_pages("001r-002v", override="1-3") == [1, 2, 3]
-        assert mapper.folio_str_to_pdf_pages("003r-003v") == [5, 6]
+        assert mapper.folio_str_to_pdf_pages("003r-003v") == [4, 5]
 
-    def test_override_sin_exclusion_es_literal(self):
-        """Sin páginas descartadas, el rango manual es literal."""
-        mapper = mapper_from_config(pag_pdf_inicio=1)
-        mapper.start_sequence()
-        assert mapper.folio_str_to_pdf_pages("001r-001v", override="5-6") == [5, 6]
-
-    def test_override_todo_excluido_retorna_none(self):
-        """Si todas las páginas del rango manual están excluidas, retorna None."""
+    def test_override_fuera_de_rango_retorna_none(self):
+        """Posiciones más allá de la secuencia activa retornan None."""
         mapper = self._mapper([1, 3, 4], 4)
         mapper.start_sequence()
-        assert mapper.folio_str_to_pdf_pages("001r-001v", override="2-2") is None
+        assert mapper.folio_str_to_pdf_pages("001r-001v", override="5-5") is None
 
     def test_escenario_real_protocolo_11(self):
         """Escenario de prueba-protocolo-11-con-SF.json:
         Excluidas: 262, 263, 474, 477.
-        Override en fila 799: '529-531' (páginas físicas).
+        Override en fila 799: '529-531' (posiciones renumeradas).
         Fila 800 debe continuar en 532-533.
         """
         all_pages = set(range(1, 867))
@@ -284,4 +308,31 @@ class TestManualOverrideConExclusion:
         assert FolioMapper.format_pages([373, 374, 375]) == "373-375"
         assert FolioMapper.format_pages([7]) == "7"
         assert FolioMapper.format_pages([]) is None
+
+
+class TestPosicionAFisica:
+    """Conversión posiciones renumeradas → páginas físicas del PDF."""
+
+    def test_sin_modo_posicion_es_identidad(self):
+        mapper = mapper_from_config(pag_pdf_inicio=1)
+        assert mapper.to_physical_pages([1, 2, 3]) == [1, 2, 3]
+
+    def test_con_paginas_activas_traduce_posiciones(self):
+        mapper = mapper_from_config(
+            pag_pdf_inicio=1, active_pages=[1, 3, 4, 5], total_pdf_pages=5
+        )
+        assert mapper.to_physical_pages([1, 2, 3, 4]) == [1, 3, 4, 5]
+        assert mapper.to_physical_pages([2, 3]) == [3, 4]
+
+    def test_posiciones_fuera_de_rango_se_omiten(self):
+        mapper = mapper_from_config(
+            pag_pdf_inicio=1, active_pages=[1, 3], total_pdf_pages=3
+        )
+        assert mapper.to_physical_pages([1, 5]) == [1]
+
+    def test_none_se_mantiene(self):
+        mapper = mapper_from_config(
+            pag_pdf_inicio=1, active_pages=[1, 3], total_pdf_pages=3
+        )
+        assert mapper.to_physical_pages(None) is None
 

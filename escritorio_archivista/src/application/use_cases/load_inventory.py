@@ -29,7 +29,6 @@ class CargarInventarioUseCase:
         fila_datos_inicio: int = DEFAULT_DATA_START_ROW,
         fila_inicio: int = DEFAULT_DATA_START_ROW,
         fila_fin: int = 500,
-        folio_inicio: str = "001r",
         pag_pdf_inicio: int = 1,
         segmentos: Optional[list] = None,
         exclusiones: Optional[list] = None,

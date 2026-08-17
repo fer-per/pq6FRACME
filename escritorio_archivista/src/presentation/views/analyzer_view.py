@@ -522,6 +522,10 @@ class AnalyzerView(QWidget):
         )
         self._vm.correction_applied.connect(self._vm.run_analysis)
 
+        # Si el editor PDF excluye/reordena hojas, el mapeo pg_pdf cambia:
+        # re-renderizar las pestañas con los registros y el último análisis.
+        self._state.records_changed.connect(self._on_records_changed)
+
         # Conectar click en cada tabla de error → habilitar corrección + navegar PDF
         for tab in [self._tab_all, self._tab_folios, self._tab_topica,
                      self._tab_cronica, self._tab_coverage]:
@@ -552,6 +556,9 @@ class AnalyzerView(QWidget):
         if record is not None and record.pg_pdf:
             try:
                 first_page = int(record.pg_pdf.split('-')[0])
+                # pg_pdf es la posición renumerada (con editor activo) o la
+                # página física (idéntica a la posición sin editor): navegar
+                # directo a la vista previa.
                 self._state.pdf_current_page = first_page
                 main_window = self.window()
                 if hasattr(main_window, '_render_current_page'):
@@ -593,6 +600,15 @@ class AnalyzerView(QWidget):
         if not validadas:
             return list(errors)
         return [e for e in errors if e.record_id not in validadas]
+
+    def _on_records_changed(self):
+        """Re-renderiza las pestañas con el mapeo pg_pdf vigente.
+
+        Se dispara cuando el editor PDF excluye/reordena hojas y cambia el
+        mapeo folio → página. Reusa el último análisis para no re-ejecutarlo.
+        """
+        if self._last_result is not None:
+            self._on_analysis_finished(self._last_result)
 
     def _on_analysis_finished(self, result):
         self._last_result = result

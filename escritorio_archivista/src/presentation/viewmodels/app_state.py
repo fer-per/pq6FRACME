@@ -60,8 +60,7 @@ class AppStateVM(QObject):
         self._fila_datos_auto: bool = True
         self._fila_inicio: int = 0
         self._fila_fin: int = 0
-        self._folio_inicio: str = ""
-        self._pag_pdf_inicio: int = 0
+        self._pag_pdf_inicio: int = 1
         self._segmentos: list = []
         self._overrides: dict = {}
         self._page_map: dict = {}
@@ -226,16 +225,7 @@ class AppStateVM(QObject):
 
     @pag_pdf_inicio.setter
     def pag_pdf_inicio(self, value: int):
-        self._pag_pdf_inicio = max(0, value)
-        self.config_changed.emit()
-
-    @property
-    def folio_inicio(self) -> str:
-        return self._folio_inicio
-
-    @folio_inicio.setter
-    def folio_inicio(self, value: str):
-        self._folio_inicio = value
+        self._pag_pdf_inicio = max(1, value)
         self.config_changed.emit()
 
     @property
@@ -308,6 +298,22 @@ class AppStateVM(QObject):
 
     # ═══ MÉTODOS ═══════════════════════════════════════════════
 
+    def pagina_fisica_a_posicion(self, pagina: int) -> Optional[int]:
+        """Convierte una página física del PDF a su posición en la secuencia activa.
+
+        La vista previa y el editor PDF trabajan con la posición (1-based)
+        dentro de las páginas activas (las que quedaron tras excluir hojas o
+        reordenarlas). ``pg_pdf``, en cambio, muestra números de página
+        físicos. Devuelve None si la página fue excluida.
+        """
+        if self._active_pages:
+            if pagina in self._active_pages:
+                return self._active_pages.index(pagina) + 1
+            return None
+        if 1 <= pagina <= self._pdf_total_pages:
+            return pagina
+        return None
+
     def add_log(self, tipo: str, mensaje: str):
         """Agrega una entrada de log y emite señal."""
         log = SystemLog.now(tipo, mensaje)
@@ -362,7 +368,6 @@ class AppStateVM(QObject):
             "fila_datos_inicio": self._fila_datos_inicio,
             "fila_inicio": self._fila_inicio,
             "fila_fin": self._fila_fin,
-            "folio_inicio": self._folio_inicio,
             "pag_pdf_inicio": self._pag_pdf_inicio,
             "fila_datos_auto": self._fila_datos_auto,
             "pdf_total_pages": self._pdf_total_pages,
@@ -387,8 +392,7 @@ class AppStateVM(QObject):
         self._fila_datos_inicio = data.get("fila_datos_inicio", 0)
         self._fila_inicio = data.get("fila_inicio", 0)
         self._fila_fin = data.get("fila_fin", 0)
-        self._folio_inicio = data.get("folio_inicio", "")
-        self._pag_pdf_inicio = data.get("pag_pdf_inicio", 0)
+        self._pag_pdf_inicio = data.get("pag_pdf_inicio", 1)
         self._fila_datos_auto = bool(data.get("fila_datos_auto", True))
         self._pdf_total_pages = data.get("pdf_total_pages", 0)
         self._acervo_num = data.get("acervo_num", "7")
@@ -445,8 +449,7 @@ class AppStateVM(QObject):
         self._fila_datos_auto = True
         self._fila_inicio = 0
         self._fila_fin = 0
-        self._folio_inicio = ""
-        self._pag_pdf_inicio = 0
+        self._pag_pdf_inicio = 1
         self._segmentos = []
         self._overrides = {}
         self._page_map = {}

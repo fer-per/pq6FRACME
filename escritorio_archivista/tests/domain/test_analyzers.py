@@ -76,6 +76,19 @@ class TestFolioAnalyzer:
         assert len(result.advertencias) == 1
         assert result.advertencias[0].tipo == "SALTO"
 
+    def test_salto_descripcion_muestra_folio_con_r_v(self):
+        """La descripción del salto indica el folio esperado y el hallado
+        con su cara recto/verso (003r, 005r...)."""
+        records = [
+            _rec(id="#0001", folios="001r-002v"),
+            _rec(id="#0002", fila=11, folios="005r-006v"),
+        ]
+        result = analizar_folios(records)
+        salto = result.advertencias[0]
+        assert "003r" in salto.descripcion
+        assert "005r" in salto.descripcion
+        assert salto.valor_esperado == "Folio 003r"
+
     def test_salto_con_exclusion(self):
         records = [
             _rec(id="#0001", folios="001r-002v"),

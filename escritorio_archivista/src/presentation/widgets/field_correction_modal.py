@@ -140,7 +140,7 @@ class FieldCorrectionModal(QDialog):
         group_layout.addSpacing(8)
         group_layout.addWidget(QLabel("Nuevo valor (vacío = automático):"))
         self._manual_input = QLineEdit(self._record.pg_pdf_manual)
-        self._manual_input.setPlaceholderText("ej. 140-149  (pág. físicas del PDF)")
+        self._manual_input.setPlaceholderText("ej. 140-149  (posiciones de la grilla)")
         self._manual_input.setFont(get_font("mono_bold"))
         self._manual_input.setStyleSheet(
             f"background-color: {self._palette['surface']}; "

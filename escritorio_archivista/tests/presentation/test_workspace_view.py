@@ -41,11 +41,6 @@ class _StubSpin:
         pass
 
 
-class _StubText:
-    def setText(self, value):
-        pass
-
-
 class _StubDrop:
     def __init__(self, path=None):
         self._path = path
@@ -76,7 +71,6 @@ class _StubState:
         self.fila_inicio = 12
         self.fila_fin = 0
         self.pag_pdf_inicio = 1
-        self.folio_inicio = "001r"
 
 
 class TestRefreshFromState:
@@ -93,7 +87,6 @@ class TestRefreshFromState:
         view._fila_inicio_spin = _StubSpin()
         view._fila_fin_spin = _StubSpin()
         view._pag_pdf_spin = _StubSpin()
-        view._folio_inicio_input = _StubText()
         view._table = _StubTable()
         view._count_label = _StubLabel()
         return view

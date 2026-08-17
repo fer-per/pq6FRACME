@@ -123,6 +123,7 @@ class TestFragmentarPDFUseCase:
             output_dir=tmp_dir,
             acervo_num="7",
             pag_pdf_inicio=1,
+            total_pdf_pages=100,
         )
 
         # El PDF maestro se abre UNA sola vez y se cierra siempre
@@ -171,6 +172,7 @@ class TestFragmentarPDFUseCase:
             output_dir=tmp_dir,
             acervo_num="7",
             pag_pdf_inicio=1,
+            total_pdf_pages=100,
         )
 
         assert result.total_exitos == 2
@@ -213,6 +215,7 @@ class TestFragmentarPDFUseCase:
             output_dir=tmp_dir,
             acervo_num="7",
             pag_pdf_inicio=1,
+            total_pdf_pages=100,
             incidencias_validadas={"#0002"},
         )
 
@@ -251,6 +254,7 @@ class TestFragmentarPDFUseCase:
             output_dir=tmp_dir,
             acervo_num="7",
             pag_pdf_inicio=1,
+            total_pdf_pages=100,
         )
 
         assert result.total_exitos == 1
@@ -285,11 +289,41 @@ class TestFragmentarPDFUseCase:
             output_dir=tmp_dir,
             acervo_num="7",
             pag_pdf_inicio=1,
+            total_pdf_pages=100,
         )
 
         assert result.total_exitos == 1
         pdf_service.extraer_paginas.assert_called_once_with(
             pdf_service.abrir.return_value, [3, 4], dest
+        )
+        assert records[0].estado == "FRAGMENTADO"
+
+    def test_extrae_paginas_fisicas_con_editor_activo(self):
+        """Con active_pages (editor), las posiciones se traducen a físicas
+        antes de extraer del PDF maestro."""
+        pdf_service = MagicMock()
+        hierarchy = MagicMock()
+        uc = FragmentarPDFUseCase(pdf_service, hierarchy)
+
+        tmp_dir = tempfile.mkdtemp()
+        dest = os.path.join(tmp_dir, "out", "registro.pdf")
+        hierarchy.construir_ruta.return_value = dest
+
+        records = [self._record(folios="001r-002v")]
+
+        uc.ejecutar(
+            records=records,
+            pdf_path="maestro.pdf",
+            output_dir=tmp_dir,
+            acervo_num="7",
+            pag_pdf_inicio=1,
+            total_pdf_pages=10,
+            active_pages=[1, 3, 4, 5, 6, 7, 8, 9, 10],  # física 2 excluida
+        )
+
+        # posiciones 1-4 → físicas [1, 3, 4, 5]
+        pdf_service.extraer_paginas.assert_called_once_with(
+            pdf_service.abrir.return_value, [1, 3, 4, 5], dest
         )
         assert records[0].estado == "FRAGMENTADO"
 

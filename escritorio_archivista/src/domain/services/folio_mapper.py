@@ -50,10 +50,18 @@ class FolioMapper:
         ignoradas: Optional[List[int]] = None,
         page_map: Optional[dict] = None,
         active_pages: Optional[list] = None,
+        total_pdf_pages: Optional[int] = None,
     ):
         self.page_map = page_map or {}
         self.pag_pdf_inicio = pag_pdf_inicio
-        self._active_sequence = sorted(active_pages) if active_pages else None
+        # El editor PDF define las páginas activas EN ORDEN (reordenamiento).
+        # Cuando están presentes, el mapeo trabaja con POSICIONES renumeradas
+        # (1,2,3,...): la columna pg_pdf coincide con el editor y la vista
+        # previa. Sin páginas activas se mantiene el mapeo físico clásico.
+        self._active_sequence = [int(p) for p in (active_pages or [])]
+        self._sequence_len = len(self._active_sequence)
+        self._position_mode = self._sequence_len > 0
+        self.total_pdf_pages = total_pdf_pages
 
         # Si hay page_map, traducir pag_pdf_inicio al espacio original
         if page_map:
@@ -73,13 +81,13 @@ class FolioMapper:
                         break
 
         self.ignoradas_set = set(ignoradas or [])
-        self.folio_page_counter = self.pag_pdf_inicio
+        self.folio_page_counter = 1 if self._position_mode else self.pag_pdf_inicio
         self._last_segment: Optional[Segmento] = None
         self._last_used_page: Optional[int] = None
 
     def start_sequence(self):
         """Reinicia el contador interno. LLAMAR antes de procesar registros."""
-        self.folio_page_counter = self.pag_pdf_inicio
+        self.folio_page_counter = 1 if self._position_mode else self.pag_pdf_inicio
         self._last_segment = None
         self._last_used_page = None
 
@@ -110,21 +118,95 @@ class FolioMapper:
            d. Incrementar contador
            e. Saltar páginas en ignoradas_set
            f. Si hay page_map, traducir la página
+           g. Si hay total_pdf_pages, descartar páginas más allá del PDF
         3. Retornar lista de páginas
         """
-        if override:
-            pages = self._parse_manual_pages(override)
-            if pages:
-                pages = self._translate_manual_pages(pages)
-                if not pages:
-                    return None
-                # El contador avanza al siguiente número físico; el algoritmo
-                # normal se encargará de saltar las ignoradas si las hubiera.
-                self.folio_page_counter = pages[-1] + 1
-                self._last_used_page = pages[-1]
-                return pages
+        # Sin PDF cargado no hay mapeo a páginas.
+        if self.total_pdf_pages is not None and self.total_pdf_pages <= 0:
             return None
 
+        if override:
+            return self._map_manual_override(override)
+
+        if self._position_mode:
+            return self._map_positions(folio_str, share_last)
+
+        return self._map_physical(folio_str, share_last)
+
+    def _map_manual_override(self, override: str) -> Optional[List[int]]:
+        """Resuelve un rango manual (override) de pg_pdf.
+
+        En modo posición el usuario ingresa posiciones renumeradas (las que
+        muestra la columna pg_pdf tras descartar hojas). En modo físico, las
+        páginas físicas validadas contra las activas. El contador continúa
+        después de la última página del rango.
+        """
+        pages = self._parse_manual_pages(override)
+        if not pages:
+            return None
+        if self._position_mode:
+            pages = [p for p in pages if 1 <= p <= self._sequence_len]
+            if not pages:
+                return None
+        else:
+            pages = self._translate_manual_pages(pages)
+            if not pages:
+                return None
+        if self.total_pdf_pages is not None:
+            pages = [p for p in pages if p <= self.total_pdf_pages]
+            if not pages:
+                return None
+        # El contador avanza al siguiente número; el algoritmo normal se
+        # encargará de saltar las ignoradas si las hubiera.
+        self.folio_page_counter = pages[-1] + 1
+        self._last_used_page = pages[-1]
+        return pages
+
+    def _map_positions(self, folio_str: str, share_last: bool) -> Optional[List[int]]:
+        """Mapeo folio → posición renumerada (editor PDF con páginas activas).
+
+        La secuencia es la lista ordenada de páginas físicas activas (la
+        que reordena el editor con Mover ↑/↓). El folio consume la siguiente
+        posición (1-based) de esa secuencia.
+        """
+        if share_last and self._last_used_page is not None:
+            self.folio_page_counter = self._last_used_page
+
+        parsed = parse_folios(folio_str)
+        if parsed is None:
+            return None
+        desde_num, desde_cara, hasta_num, hasta_cara = parsed
+        desde_int = folio_to_int(desde_num, desde_cara)
+        hasta_int = folio_to_int(hasta_num, hasta_cara)
+
+        pages = []
+        for folio_int in range(desde_int, hasta_int + 1):
+            seg = self._find_segment(folio_int)
+            if seg is not None and seg != self._last_segment:
+                self.folio_page_counter = self._seg_to_position(seg)
+                self._last_segment = seg
+
+            page = self.folio_page_counter
+            self.folio_page_counter += 1
+
+            # No hay más posiciones activas que asignar.
+            if page > self._sequence_len:
+                continue
+            pages.append(page)
+
+        if pages:
+            self._last_used_page = pages[-1]
+        return pages
+
+    def _seg_to_position(self, seg: Segmento) -> int:
+        """Convierte la página física de un segmento a su posición activa."""
+        try:
+            return self._active_sequence.index(seg.pag_pdf_inicio) + 1
+        except ValueError:
+            return 1
+
+    def _map_physical(self, folio_str: str, share_last: bool) -> Optional[List[int]]:
+        """Mapeo clásico folio → página física (sin editor PDF activo)."""
         if share_last and self._last_used_page is not None:
             self.folio_page_counter = self._last_used_page
 
@@ -159,6 +241,10 @@ class FolioMapper:
                         continue
                 else:
                     continue
+
+            # No mapear más allá del total de hojas del PDF cargado.
+            if self.total_pdf_pages is not None and page > self.total_pdf_pages:
+                continue
 
             pages.append(page)
 
@@ -249,6 +335,22 @@ class FolioMapper:
             partes.append(f"{inicio}-{prev}")
         return ",".join(partes)
 
+    def to_physical_pages(self, pages: Optional[List[int]]) -> Optional[List[int]]:
+        """Convierte posiciones renumeradas a páginas físicas del PDF.
+
+        En modo posición (editor PDF activo), la posición 1,2,3... corresponde
+        a ``_active_sequence[pos-1]`` (la página física en ese lugar del
+        orden). Sin modo posición, posición y página física coinciden
+        (identidad). Usar antes de extraer páginas del PDF maestro.
+        """
+        if not pages or not self._position_mode:
+            return pages
+        result = []
+        for p in pages:
+            if 1 <= p <= self._sequence_len:
+                result.append(self._active_sequence[p - 1])
+        return result if result else None
+
     def max_pdf_page(self, records: list) -> int:
         """Calcula la página PDF máxima requerida.
 
@@ -336,4 +438,5 @@ def mapper_from_config(
         ignoradas=ignoradas,
         page_map=page_map,
         active_pages=active_pages,
+        total_pdf_pages=total_pdf_pages,
     )

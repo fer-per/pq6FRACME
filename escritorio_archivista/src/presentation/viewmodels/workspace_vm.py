@@ -39,13 +39,12 @@ class LoadInventoryWorker(QRunnable):
                 fila_datos_inicio=self._state.fila_datos_inicio,
                 fila_inicio=self._state.fila_inicio,
                 fila_fin=fila_fin,
-                folio_inicio=self._state.folio_inicio,
                 pag_pdf_inicio=self._state.pag_pdf_inicio,
                 segmentos=self._state.segmentos or None,
                 exclusiones=self._state.exclusions or None,
                 page_map=self._state.page_map or None,
                 active_pages=self._state.active_pages or None,
-                total_pdf_pages=self._state.pdf_total_pages or None,
+                total_pdf_pages=self._state.pdf_total_pages,
                 auto_detect=self._state.fila_datos_auto,
             )
             self.signals.finished.emit(result)
@@ -83,6 +82,10 @@ class WorkspaceVM(QObject):
             total = self._container.pdf_service.obtener_total_paginas(path)
             self._state.pdf_total_pages = total
             self._state.add_log("SUCCESS", f"PDF cargado: {total} páginas.")
+            # Con el PDF cargado ya se conoce el total de hojas: recalcular
+            # el mapeo folio → página con ese límite.
+            self._state.recalcular_pg_pdf()
+            self._state.records_changed.emit()
             self.pdf_loaded.emit(total)
         except Exception as e:
             self._state.add_log("ERR", f"Error al cargar PDF: {e}")
@@ -114,7 +117,6 @@ class WorkspaceVM(QObject):
                     if prev.estado:
                         rec.estado = prev.estado
         self._state.records = result.records
-        self._state.recalcular_pg_pdf()
         self._state.suggestions = result.suggestions
 
         # Mapeo automático: expone el rango real detectado en el Excel.
@@ -124,6 +126,15 @@ class WorkspaceVM(QObject):
             if self._state.fila_datos_auto:
                 self._state.fila_inicio = primera_fila
 
+        # Ajustar el punto de arranque ANTES del recálculo para que el
+        # mapeo folio→página comience siempre en la hoja 1.
+        if self._state.fila_datos_auto:
+            if result.records:
+                self._state.fila_fin = max(r.fila for r in result.records)
+                self._state.pag_pdf_inicio = 1
+
+        self._state.recalcular_pg_pdf()
+
         if result.metadata.get("acervo_detectado"):
             self._state.acervo_num = result.metadata["acervo_detectado"]
 
@@ -132,13 +143,6 @@ class WorkspaceVM(QObject):
 
         if result.metadata.get("siglo_detectado"):
             self._state.siglo = result.metadata["siglo_detectado"]
-
-        if self._state.fila_datos_auto:
-            if result.records:
-                self._state.fila_fin = max(r.fila for r in result.records)
-                self._state.pag_pdf_inicio = 1
-                if not self._state.folio_inicio:
-                    self._state.folio_inicio = result.records[0].folios or ""
 
         self._state.add_log(
             "SUCCESS",
@@ -153,13 +157,12 @@ class WorkspaceVM(QObject):
         self.loading_error.emit(error_msg)
 
     def update_config(self, fila_datos_inicio: int, fila_inicio: int,
-                      fila_fin: int, folio_inicio: str, pag_pdf_inicio: int):
+                      fila_fin: int, pag_pdf_inicio: int):
         """Actualiza la configuración de mapeo y recarga."""
         self._state.fila_datos_auto = False
         self._state.fila_datos_inicio = fila_datos_inicio
         self._state.fila_inicio = fila_inicio
         self._state.fila_fin = fila_fin
-        self._state.folio_inicio = folio_inicio
         self._state.pag_pdf_inicio = pag_pdf_inicio
         self._state.add_log("INFO", "Configuración actualizada.")
 

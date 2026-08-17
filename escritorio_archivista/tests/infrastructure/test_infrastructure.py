@@ -126,16 +126,41 @@ class TestHierarchyBuilder:
         )
 
         assert "ACERVO DOCUMENTAL NUMERO 7" in ruta
-        assert "SIGLO 19" in ruta
+        assert "SIGLO XIX" in ruta
         assert "FONDO DOCUMENTAL" in ruta
-        assert "García López" in ruta
+        assert "GARCÍA LÓPEZ" in ruta
         assert "1891" in ruta
         assert "PROTOCOLO 3" in ruta
         assert "REGISTRO 001" in ruta
-        assert "Compraventa de finca" in ruta
+        assert "COMPRAVENTA DE FINCA" in ruta
         assert "3. MARZO" in ruta
         assert "Juan Pérez" in ruta
         assert "María López.pdf" in ruta
+
+    def test_carpetas_nivel_1_a_9_en_mayusculas_interesados_preservan_caso(self):
+        """Los niveles 1-9 van en mayúsculas; interesado1 (carpeta) e
+        interesado2 (archivo) conservan la grafía de la columna."""
+        record = InventoryRecord(
+            id="#0001", fila=10, registro="001", escribano="García",
+            protocolo="3", folios="001r-002v", pg_pdf="1-4",
+            titulo="Compraventa de finca", fecha_inicio="15/03/1891",
+            interesado1="Juan de Rueda", interesado2="María López",
+        )
+        ruta = self.builder.construir_ruta(
+            record, "/output", "7", "García", "XIX"
+        )
+
+        niveles = ruta[len("/output"):].strip(os.sep).split(os.sep)
+        assert niveles[0] == "ACERVO DOCUMENTAL NUMERO 7"
+        assert niveles[1] == "SIGLO XIX"
+        assert niveles[2] == "FONDO DOCUMENTAL"
+        assert niveles[3] == "GARCÍA"
+        assert niveles[5] == "PROTOCOLO 3"
+        assert niveles[6] == "REGISTRO 001"
+        assert niveles[7] == "COMPRAVENTA DE FINCA"
+        assert niveles[8] == "3. MARZO"
+        assert niveles[9] == "Juan de Rueda"
+        assert niveles[10] == "María López.pdf"
 
     def test_acervo_vacio_no_incluye_numero(self):
         record = InventoryRecord(
@@ -167,7 +192,7 @@ class TestHierarchyBuilder:
             interesado2="María López",
         )
         ruta = self.builder.construir_ruta(record, "/output", "7", "García", "")
-        assert "SIGLO 19" in ruta
+        assert "SIGLO XIX" in ruta
 
     def test_siglo_y_año_ausentes_usa_respaldo(self):
         record = InventoryRecord(
@@ -319,16 +344,23 @@ class TestHierarchyBuilder:
         assert HierarchyBuilder._primer_interesado("A, B, C") == "A"
         assert HierarchyBuilder._primer_interesado("  A , B  ") == "A"
 
+    def test_interesados_truncan_en_coma_guion_o_parentesis(self):
+        """El nombre de carpeta y archivo corta en coma, guion o paréntesis."""
+        assert HierarchyBuilder._primer_interesado("Pedro Álvarez - Escribano") == "Pedro Álvarez"
+        assert HierarchyBuilder._primer_interesado("Ana (hija de Pedro)") == "Ana"
+        assert HierarchyBuilder._primer_interesado("Juan, Luis y Pedro") == "Juan"
+        assert HierarchyBuilder._primer_interesado("  María - De Rueda  ") == "María"
+
     def test_titulo_usa_valor_literal_de_la_columna(self):
-        """La carpeta del título usa el texto exacto de la columna 'titulo'."""
+        """La carpeta del título usa el texto de la columna 'titulo', en mayúsculas."""
         record = InventoryRecord(
             id="#0002", fila=11, registro="002", escribano="López",
             protocolo="1", folios="003r", pg_pdf="5",
             titulo="Testamento abierto", fecha_inicio="01/06/1891",
         )
         ruta = self.builder.construir_ruta(record, "/output", "7", "López", "XIX")
-        assert "Testamento abierto" in ruta
-        assert "TESTAMENTO" not in ruta
+        assert "TESTAMENTO ABIERTO" in ruta
+        assert "Testamento abierto" not in ruta
 
     def test_registro_usa_numero_real_del_catalogo(self):
         """El nivel REGISTRO usa el N° de registro del inventario, no el ID interno."""

@@ -9,7 +9,7 @@ y se continúa con los siguientes niveles.
 
 Niveles:
 1. ACERVO DOCUMENTAL NUMERO {acervo_num}     ← metadato (fila del Excel)
-2. SIGLO {siglo_arabigo}                     ← metadato romano (fila del Excel)
+2. SIGLO {siglo_romano}                     ← metadato romano (fila del Excel)
 3. FONDO DOCUMENTAL                          ← constante
 4. {escribano}                               ← metadato (fila del Excel)
 5. {año}                                     ← de la fecha de inicio
@@ -19,6 +19,9 @@ Niveles:
 9. {mes}                                     ← de la fecha de inicio
 10. {interesado1}                            ← 1er interesado (antes de la coma)
 11. {interesado2}.pdf                        ← nombre del archivo
+
+Los niveles 1 a 9 se escriben EN MAYÚSCULAS; los niveles 10 y 11
+(interesados) conservan la grafía original de la columna.
 
 Respaldo por nivel cuando falta el dato:
 - SIN SIGLO, SIN ESCRIBANO, SIN AÑO, SIN PROTOCOLO, SIN REGISTRO,
@@ -41,7 +44,6 @@ from src.domain.value_objects import (
     YEAR_MIN,
     YEAR_MAX,
     INVALID_FILENAME_CHARS,
-    ROMAN_TO_ARABIC,
     SIN_SIGLO,
     SIN_ESCRIBANO,
     SIN_ANIO,
@@ -94,31 +96,29 @@ class HierarchyBuilder(HierarchyBuilderPort):
 
     @staticmethod
     def _nivel_acervo(acervo_num: str) -> str:
-        """Nivel 1: número de acervo (metadato global)."""
+        """Nivel 1: número de acervo (metadato global), en mayúsculas."""
         valor = (acervo_num or "").strip()
         if not valor:
             return "ACERVO DOCUMENTAL"
-        return f"ACERVO DOCUMENTAL NUMERO {HierarchyBuilder._sanitize(valor)}"
+        return f"ACERVO DOCUMENTAL NUMERO {HierarchyBuilder._sanitize(valor).upper()}"
 
     @staticmethod
     def _nivel_siglo(siglo: str, anio: Optional[int]) -> str:
-        """Nivel 2: siglo arábigo a partir del romano (metadato) o del año."""
+        """Nivel 2: siglo romano (metadato); sin metadato se deriva del año."""
         romano = (siglo or "").strip().upper()
         if romano:
-            valor = ROMAN_TO_ARABIC.get(romano)
-            if valor:
-                return f"SIGLO {valor}"
+            return f"SIGLO {romano}"
         if anio is not None:
-            return f"SIGLO {(anio // 100) + 1}"
+            return f"SIGLO {HierarchyBuilder._arabigo_a_romano((anio // 100) + 1)}"
         return SIN_SIGLO
 
     @staticmethod
     def _nivel_escribano(escribano: str) -> str:
-        """Nivel 4: escribano global; si falta, respaldo."""
+        """Nivel 4: escribano global en mayúsculas; si falta, respaldo."""
         valor = (escribano or "").strip()
         if not valor:
             return SIN_ESCRIBANO
-        return HierarchyBuilder._sanitize(valor)
+        return HierarchyBuilder._sanitize(valor).upper()
 
     @staticmethod
     def _nivel_anio(anio: Optional[int]) -> str:
@@ -129,16 +129,17 @@ class HierarchyBuilder(HierarchyBuilderPort):
 
     @staticmethod
     def _nivel_protocolo(record: InventoryRecord) -> str:
-        """Nivel 6: protocolo; si falta, respaldo."""
+        """Nivel 6: protocolo en mayúsculas; si falta, respaldo."""
         protocolo = (record.protocolo or "").strip()
         if not protocolo:
             return SIN_PROTOCOLO
-        return f"PROTOCOLO {HierarchyBuilder._sanitize(protocolo)}"
+        return f"PROTOCOLO {HierarchyBuilder._sanitize(protocolo).upper()}"
 
     @staticmethod
     def _nivel_registro(record: InventoryRecord, registro_id: str) -> str:
         """
-        Nivel 7: número real del registro; si falta o es inválido, respaldo.
+        Nivel 7: número real del registro en mayúsculas; si falta o es
+        inválido, respaldo.
         """
         valor = (record.registro or "").strip()
 
@@ -146,17 +147,17 @@ class HierarchyBuilder(HierarchyBuilderPort):
         # interpretada, filas de índice/sub-encabezado o anotaciones.
         if valor and valor not in ("0", "00:00:00") and ":" not in valor \
                 and not re.search(r'(?i)(registro|protocolo|indice|salto)', valor):
-            return f"REGISTRO {HierarchyBuilder._sanitize(valor)}"
+            return f"REGISTRO {HierarchyBuilder._sanitize(valor).upper()}"
 
         return SIN_REGISTRO
 
     @staticmethod
     def _nivel_titulo(record: InventoryRecord) -> str:
-        """Nivel 8: título literal de la columna; si falta, respaldo."""
+        """Nivel 8: título literal de la columna en mayúsculas; si falta, respaldo."""
         titulo = (record.titulo or "").strip()
         if not titulo:
             return SIN_TITULO
-        return HierarchyBuilder._sanitize(titulo)
+        return HierarchyBuilder._sanitize(titulo).upper()
 
     @staticmethod
     def _nivel_mes(mes: Optional[int]) -> str:
@@ -212,13 +213,20 @@ class HierarchyBuilder(HierarchyBuilderPort):
         Toma solo el primer interesado de un nombre compuesto.
 
         En el inventario, un interesado puede listar varias personas
-        separadas por coma (ej: "Luis de Rueda, Juan de Mendoza"). Se
-        usa únicamente el texto anterior a la primera coma, sin incluir
-        la coma, para carpetas y nombres de archivo más cortos.
+        separadas por coma, guion o paréntesis (ej: "Luis de Rueda,
+        Juan de Mendoza", "Ana (hija de Pedro)"). Se usa únicamente el
+        texto anterior al primer separador, sin incluirlo, para carpetas
+        y nombres de archivo más cortos.
         """
         if not nombre:
             return ""
-        return nombre.split(",", 1)[0].strip()
+        # Cortar en el primer separador: coma, guion o paréntesis.
+        for sep in (",", "-", "(", ")"):
+            idx = nombre.find(sep)
+            if idx != -1:
+                nombre = nombre[:idx]
+                break
+        return nombre.strip()
 
     def _extraer_anio_mes(
         self, record: InventoryRecord
@@ -308,6 +316,22 @@ class HierarchyBuilder(HierarchyBuilderPort):
             return "SIN_NOMBRE"
 
         return name
+
+    @staticmethod
+    def _arabigo_a_romano(n: int) -> str:
+        """
+        Convierte un entero (siglo) a número romano para la jerarquía.
+
+        Soporta siglos hasta el 39; fuera de rango devuelve el número
+        tal cual.
+        """
+        if n <= 0 or n >= 40:
+            return str(n)
+        decenas = ["", "X", "XX", "XXX"][n // 10]
+        unidades = [
+            "", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX",
+        ][n % 10]
+        return decenas + unidades
 
     @staticmethod
     def _resolver_colision(full_path: str) -> str:

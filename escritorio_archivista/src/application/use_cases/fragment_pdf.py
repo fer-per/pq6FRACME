@@ -145,6 +145,10 @@ class FragmentarPDFUseCase:
                     pages = mapper.folio_str_to_pdf_pages(
                         record.folios, share_last=record.comparte_hoja
                     )
+                # Con el editor PDF activo el mapper devuelve posiciones
+                # renumeradas: traducir a páginas físicas antes de extraer.
+                if pages:
+                    pages = mapper.to_physical_pages(pages)
                 if not pages:
                     pendientes.append({
                         "ID": record.id,

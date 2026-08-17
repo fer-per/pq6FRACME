@@ -37,7 +37,6 @@ def _session_data(records, **kwargs):
         "fila_datos_inicio": 12,
         "fila_inicio": 12,
         "fila_fin": 0,
-        "folio_inicio": "001r",
     }
     data.update(kwargs)
     return data
@@ -78,6 +77,36 @@ class TestRecalcularPgPdf:
         state = AppStateVM()
         state.from_dict(_session_data([]))
         assert state.records == []
+
+
+class TestPaginaFisicaAPosicion:
+    """Conversión página física → posición en la secuencia activa (vista previa)."""
+
+    def test_sin_exclusiones_posicion_igual_a_pagina(self):
+        state = AppStateVM()
+        state.pdf_total_pages = 660
+        assert state.pagina_fisica_a_posicion(5) == 5
+
+    def test_con_exclusiones_mapea_a_posicion_activa(self):
+        state = AppStateVM()
+        state.pdf_total_pages = 4
+        state.active_pages = [1, 3, 4]  # se excluyó la 2
+        assert state.pagina_fisica_a_posicion(1) == 1
+        assert state.pagina_fisica_a_posicion(3) == 2
+        assert state.pagina_fisica_a_posicion(4) == 3
+
+    def test_con_reordenamiento_mapea_a_posicion(self):
+        state = AppStateVM()
+        state.pdf_total_pages = 4
+        state.active_pages = [2, 1, 3, 4]
+        assert state.pagina_fisica_a_posicion(2) == 1
+        assert state.pagina_fisica_a_posicion(1) == 2
+
+    def test_pagina_excluida_devuelve_none(self):
+        state = AppStateVM()
+        state.pdf_total_pages = 4
+        state.active_pages = [1, 3, 4]
+        assert state.pagina_fisica_a_posicion(2) is None
 
 
 class TestDirectorioSalidaPredeterminado:
@@ -122,7 +151,7 @@ class TestResetNuevaConfiguracion:
         assert state.exclusions == []
         assert state.suggestions == []
         assert state.profile_name is None
-        assert state.pag_pdf_inicio == 0
+        assert state.pag_pdf_inicio == 1
 
     def test_reset_conserva_tema_y_vista_dual(self):
         state = AppStateVM()

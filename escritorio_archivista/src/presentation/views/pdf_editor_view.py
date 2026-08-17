@@ -183,6 +183,7 @@ class PDFEditorView(QWidget):
         self._vm = PDFEditorVM(container, state)
         self._palette = get_palette()
         self._thumbnails: list[ThumbnailWidget] = []
+        self._thumb_by_page: dict = {}
         self._selected_page = None
         self._doc_id = 0
         self._pending: set = set()
@@ -290,6 +291,7 @@ class PDFEditorView(QWidget):
         for thumb in self._thumbnails:
             thumb.deleteLater()
         self._thumbnails.clear()
+        self._thumb_by_page.clear()
         self._doc_id += 1
         self._pending.clear()
         self._rendered.clear()
@@ -316,6 +318,7 @@ class PDFEditorView(QWidget):
             col = i % cols
             self._grid_layout.addWidget(thumb, row, col)
             self._thumbnails.append(thumb)
+            self._thumb_by_page[page] = thumb
             self._thumb_tops[page] = row * (thumb_h + spacing)
             thumb.set_number(i + 1)
 
@@ -357,11 +360,15 @@ class PDFEditorView(QWidget):
             self._thread_pool.start(task)
 
     def _on_thumbnail_rendered(self, page: int, data: bytes, doc_id: int):
-        if doc_id != self._doc_id or page > len(self._thumbnails):
+        if doc_id != self._doc_id:
             return
         self._pending.discard(page)
         self._rendered.add(page)
-        self._thumbnails[page - 1].set_image(data)
+        # La imagen se asigna por página física (no por índice): los
+        # thumbnails no están en orden físico cuando hay hojas excluidas.
+        thumb = self._thumb_by_page.get(page)
+        if thumb is not None:
+            thumb.set_image(data)
 
     def _on_thumbnail_clicked(self, page: int):
         self._selected_page = page
