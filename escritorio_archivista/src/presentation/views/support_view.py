@@ -1,12 +1,11 @@
 """
-Vista de Soporte — información de la aplicación, atajos y diagnóstico.
+Vista de Soporte — información de la aplicación, atajos y contacto.
 
 Contenido exclusivamente de texto (sin formularios ni botones), renderizado
 como Markdown con el tema activo.
 """
 import logging
 import platform
-import sys
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QTextBrowser,
@@ -16,13 +15,14 @@ from PySide6.QtCore import Qt
 
 from src.application.container import Container
 from src.presentation.viewmodels.app_state import AppStateVM
-from src.presentation.constants import (
-    APP_ROOT_DIR, DOCS_DIR, SESIONES_DIR, ModuleIcon,
-)
+from src.presentation.constants import ModuleIcon
 from src.presentation.theme.colors import get_palette
 from src.presentation.theme.fonts import get_font
 
 logger = logging.getLogger(__name__)
+
+# Nombre de contacto que se muestra en la sección "Contacto" del Soporte.
+CONTACTO_NOMBRE = "Fernando Perez Del Castillo"
 
 
 class SupportView(QWidget):
@@ -62,7 +62,6 @@ class SupportView(QWidget):
         layout.addWidget(scroll, stretch=1)
 
     def _texto_soporte(self) -> str:
-        estado = self._state
         return f"""# Soporte
 
 ## Información de la aplicación
@@ -85,18 +84,10 @@ class SupportView(QWidget):
 | `Ctrl+2` | Analizador |
 | `Ctrl+3` | Fragmentar |
 
-## Diagnóstico
-
-- **Inventario**: {estado.excel_path or "— (sin cargar)"}
-- **PDF**: {estado.pdf_path or "— (sin cargar)"}
-- **Directorio de la aplicación**: `{APP_ROOT_DIR}`
-- **Documentación**: `{DOCS_DIR}`
-- **Sesiones**: `{SESIONES_DIR}`
-
 ## Contacto
 
-Para consultas técnicas sobre este software, comunicate con el equipo de
-desarrollo del proyecto.
+Para consultas técnicas sobre este software, comunicate con
+**{self._nombre_contacto()}**.
 """
 
     def _version(self) -> str:
@@ -104,6 +95,9 @@ desarrollo del proyecto.
         if app and app.applicationVersion():
             return app.applicationVersion()
         return "2.0"
+
+    def _nombre_contacto(self) -> str:
+        return CONTACTO_NOMBRE
 
     def _pyside_version(self) -> str:
         try:
