@@ -15,11 +15,12 @@ from src.application.use_cases.load_inventory import CargarInventarioUseCase
 def _rec(
     id: str = "#0001", fila: int = 10, folios: str = "001r-002v",
     data_topica: str = "Ciudad", fecha_inicio: str = "15/03/1891",
-    **kwargs
+    registro: str = "001", escribano: str = "García",
+    protocolo: str = "1", **kwargs
 ) -> InventoryRecord:
     return InventoryRecord(
-        id=id, fila=fila, registro="001", escribano="García",
-        protocolo="1", folios=folios, pg_pdf="", titulo="Compraventa",
+        id=id, fila=fila, registro=registro, escribano=escribano,
+        protocolo=protocolo, folios=folios, pg_pdf="", titulo="Compraventa",
         data_topica=data_topica, fecha_inicio=fecha_inicio, **kwargs,
     )
 
@@ -43,6 +44,9 @@ class TestAnalizarDatosUseCase:
         assert result.folios_result is not None
         assert result.topica_result is not None
         assert result.cronica_result is not None
+        assert result.registro_result is not None
+        assert result.escribano_result is not None
+        assert result.protocolo_result is not None
         assert result.folios_result.ok
 
     def test_analisis_con_salto(self):
@@ -101,6 +105,39 @@ class TestAnalizarDatosUseCase:
         assert tipos.count("SALTO") == 0
 
         assert all(s.tipo_error != "SIN_FOLIO" for s in result.suggestions)
+
+    def test_analisis_incorpora_registro_escribano_protocolo(self):
+        """Los analizadores de registro, escribano y protocolo se ejecutan
+        y sus incidencias llegan a las sugerencias."""
+        records = [
+            _rec(id="#0001", registro="", protocolo="", escribano=""),
+            _rec(id="#0002", fila=11, registro="005", protocolo="1",
+                 escribano="García"),
+        ]
+        uc = AnalizarDatosUseCase()
+        result = uc.ejecutar(records)
+
+        assert len(result.registro_result.advertencias) >= 1
+        assert len(result.escribano_result.advertencias) >= 1
+        assert len(result.protocolo_result.advertencias) >= 1
+
+        tipos = {s.tipo_error for s in result.suggestions}
+        assert "REGISTRO" in tipos
+        assert "ESCRIBANO" in tipos
+        assert "PROTOCOLO" in tipos
+
+    def test_regresion_de_protocolo_marca_revisar(self):
+        """La regresión de protocolo (fatal) marca el registro como REVISAR."""
+        records = [
+            _rec(id="#0001", protocolo="3", escribano="García"),
+            _rec(id="#0002", fila=11, protocolo="1", escribano="García"),
+        ]
+        uc = AnalizarDatosUseCase()
+        result = uc.ejecutar(records)
+
+        revisar = [r for r in result.records if r.estado == "REVISAR"]
+        assert len(revisar) == 1
+        assert revisar[0].id == "#0002"
 
 
 # ═══════════════════════════════════════════════════════════════

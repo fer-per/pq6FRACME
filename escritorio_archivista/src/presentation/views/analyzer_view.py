@@ -10,9 +10,9 @@ import re
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
-    QTabWidget, QSizePolicy,
+    QTabWidget,
 )
-from PySide6.QtCore import QSize, Signal
+from PySide6.QtCore import Qt, QSize, Signal
 
 from src.application.container import Container
 from src.presentation.viewmodels.app_state import AppStateVM
@@ -32,39 +32,30 @@ logger = logging.getLogger(__name__)
 
 
 class AnalyzerPanel(QWidget):
-    """Panel de resumen de un analizador individual."""
+    """Panel de resumen compacto de un analizador individual.
+
+    Muestra tres elementos: icono de estado, nombre del analizador y
+    contador de resultados.
+    """
 
     def __init__(self, name: str, parent=None):
         super().__init__(parent)
         self._palette = get_palette()
         self._result = None
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setContentsMargins(12, 6, 12, 6)
+        layout.setSpacing(8)
 
         self._icon = QLabel("\u23F3")
         self._icon.setFont(get_font("icon"))
-        self._icon.setFixedWidth(30)
+        self._icon.setFixedWidth(28)
         self._icon.setStyleSheet("background: transparent;")
         layout.addWidget(self._icon)
 
-        info = QVBoxLayout()
         self._name_label = QLabel(name)
         self._name_label.setFont(get_font("body_sm_bold"))
         self._name_label.setStyleSheet("background: transparent;")
-        info.addWidget(self._name_label)
-
-        self._detail_label = QLabel("Sin ejecutar")
-        self._detail_label.setFont(get_font("body_xs"))
-        self._detail_label.setWordWrap(True)
-        self._detail_label.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
-        )
-        self._detail_label.setMinimumHeight(16)
-        self._detail_label.setStyleSheet(
-            f"color: {self._palette['text_secondary']}; background: transparent;"
-        )
-        info.addWidget(self._detail_label)
-        layout.addLayout(info, stretch=1)
+        layout.addWidget(self._name_label, stretch=1)
 
         self._count_label = QLabel("")
         self._count_label.setFont(get_font("body_sm_bold"))
@@ -82,7 +73,6 @@ class AnalyzerPanel(QWidget):
             return
 
         self._result = result
-        self._detail_label.setText(result.resumen)
         errors = len(result.errores)
         warnings = len(result.advertencias)
 
@@ -106,9 +96,6 @@ class AnalyzerPanel(QWidget):
         self._palette = get_palette(dark)
         self._name_label.setStyleSheet(
             f"color: {self._palette['text_primary']}; background: transparent;"
-        )
-        self._detail_label.setStyleSheet(
-            f"color: {self._palette['text_secondary']}; background: transparent;"
         )
         self.setStyleSheet(
             f"background-color: {self._palette['surface']}; "
@@ -177,6 +164,43 @@ _CRONICA_COLUMNS = [
     ("Esperado", "valor_esperado"),
 ]
 
+_REGISTRO_COLUMNS = [
+    ("Fila", "fila"),
+    ("N° Reg", "registro"),
+    ("Prot", "protocolo"),
+    ("Folios", "folios"),
+    ("Pág. PDF", "pg_pdf"),
+    ("Tipo", "tipo"),
+    ("Descripción", "descripcion"),
+    ("Valor Actual", "valor_actual"),
+    ("Esperado", "valor_esperado"),
+]
+
+_ESCRIBANO_COLUMNS = [
+    ("Fila", "fila"),
+    ("N° Reg", "registro"),
+    ("Escribano", "escribano"),
+    ("Prot", "protocolo"),
+    ("Folios", "folios"),
+    ("Pág. PDF", "pg_pdf"),
+    ("Tipo", "tipo"),
+    ("Descripción", "descripcion"),
+    ("Valor Actual", "valor_actual"),
+    ("Esperado", "valor_esperado"),
+]
+
+_PROTOCOLO_COLUMNS = [
+    ("Fila", "fila"),
+    ("N° Reg", "registro"),
+    ("Prot", "protocolo"),
+    ("Folios", "folios"),
+    ("Pág. PDF", "pg_pdf"),
+    ("Tipo", "tipo"),
+    ("Descripción", "descripcion"),
+    ("Valor Actual", "valor_actual"),
+    ("Esperado", "valor_esperado"),
+]
+
 # Mapea el tipo de error al campo del registro que debe resaltarse en rojo.
 _ERROR_FIELD = {
     "FORMATO": ("folios",),
@@ -187,6 +211,9 @@ _ERROR_FIELD = {
     "TOPICA": ("data_topica",),
     "CRONICA": ("fecha_inicio", "registro"),
     "COVERAGE": (),
+    "REGISTRO": ("registro",),
+    "ESCRIBANO": ("escribano",),
+    "PROTOCOLO": ("protocolo",),
 }
 
 
@@ -402,6 +429,7 @@ class AnalyzerView(QWidget):
         self._vm = AnalyzerVM(container, state)
         self._palette = get_palette()
         self._last_result = None
+        self._status_counts = (0, 0, 0)
         self._setup_ui()
         self._connect_signals()
 
@@ -431,6 +459,17 @@ class AnalyzerView(QWidget):
         self._total_label.setStyleSheet(f"color: {self._palette['text_secondary']};")
         header.addWidget(self._total_label)
 
+        self._status_label = QLabel("Sin análisis")
+        self._status_label.setFont(get_font("body_sm_bold"))
+        self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._status_label.setStyleSheet(
+            f"background-color: {self._palette['surface']}; "
+            f"color: {self._palette['text_secondary']}; "
+            f"border: 1px solid {self._palette['outline_variant']}; "
+            f"border-radius: 6px; padding: 4px 10px;"
+        )
+        header.addWidget(self._status_label)
+
         self._analyze_btn = QPushButton(" Ejecutar Análisis")
         self._analyze_btn.setFixedHeight(34)
         self._analyze_btn.setIcon(white_icon(ICON_ANALYZE))
@@ -448,11 +487,17 @@ class AnalyzerView(QWidget):
         self._panel_topica = AnalyzerPanel("Data T\u00f3pica")
         self._panel_cronica = AnalyzerPanel("Data Cr\u00f3nica")
         self._panel_coverage = AnalyzerPanel("Cobertura PDF")
+        self._panel_registro = AnalyzerPanel("N\u00famero de Registro")
+        self._panel_escribano = AnalyzerPanel("Escribano")
+        self._panel_protocolo = AnalyzerPanel("Protocolo")
 
         panels_layout.addWidget(self._panel_folios, 0, 0)
         panels_layout.addWidget(self._panel_topica, 0, 1)
         panels_layout.addWidget(self._panel_cronica, 1, 0)
         panels_layout.addWidget(self._panel_coverage, 1, 1)
+        panels_layout.addWidget(self._panel_registro, 2, 0)
+        panels_layout.addWidget(self._panel_escribano, 2, 1)
+        panels_layout.addWidget(self._panel_protocolo, 3, 0)
         layout.addLayout(panels_layout)
 
         # Pestañas por analizador
@@ -473,12 +518,27 @@ class AnalyzerView(QWidget):
             field="fecha_inicio", field_label="Fecha Inicio"
         )
         self._tab_coverage = AnalyzerErrorTab("Cobertura PDF")
+        self._tab_registro = AnalyzerErrorTab(
+            "Analizador de Número de Registro", _REGISTRO_COLUMNS,
+            field="registro", field_label="Número de Registro"
+        )
+        self._tab_escribano = AnalyzerErrorTab(
+            "Analizador de Escribano", _ESCRIBANO_COLUMNS,
+            field="escribano", field_label="Escribano"
+        )
+        self._tab_protocolo = AnalyzerErrorTab(
+            "Analizador de Protocolo", _PROTOCOLO_COLUMNS,
+            field="protocolo", field_label="Protocolo"
+        )
 
         self._tabs.addTab(self._tab_all, "Todas las Incidencias")
         self._tabs.addTab(self._tab_folios, "Folios")
         self._tabs.addTab(self._tab_topica, "Data Tópica")
         self._tabs.addTab(self._tab_cronica, "Data Crónica")
         self._tabs.addTab(self._tab_coverage, "Cobertura PDF")
+        self._tabs.addTab(self._tab_registro, "N° Registro")
+        self._tabs.addTab(self._tab_escribano, "Escribano")
+        self._tabs.addTab(self._tab_protocolo, "Protocolo")
 
         layout.addWidget(self._tabs, stretch=1)
 
@@ -528,7 +588,9 @@ class AnalyzerView(QWidget):
 
         # Conectar click en cada tabla de error → habilitar corrección + navegar PDF
         for tab in [self._tab_all, self._tab_folios, self._tab_topica,
-                     self._tab_cronica, self._tab_coverage]:
+                     self._tab_cronica, self._tab_coverage,
+                     self._tab_registro, self._tab_escribano,
+                     self._tab_protocolo]:
             tab.get_table().row_clicked.connect(
                 lambda row, data, t=tab: self._on_error_row_clicked(row, data, t)
             )
@@ -626,6 +688,9 @@ class AnalyzerView(QWidget):
         self._panel_topica.set_result(self._filter_result(result.topica_result))
         self._panel_cronica.set_result(self._filter_result(result.cronica_result))
         self._panel_coverage.set_result(self._filter_result(result.coverage_result))
+        self._panel_registro.set_result(self._filter_result(result.registro_result))
+        self._panel_escribano.set_result(self._filter_result(result.escribano_result))
+        self._panel_protocolo.set_result(self._filter_result(result.protocolo_result))
 
         # Combinar todos los errores (filtrando los validados)
         all_errors = []
@@ -633,6 +698,9 @@ class AnalyzerView(QWidget):
         topica_errors = []
         cronica_errors = []
         coverage_errors = []
+        registro_errors = []
+        escribano_errors = []
+        protocolo_errors = []
 
         if result.folios_result:
             folios_errors = self._filter_validated(
@@ -660,6 +728,30 @@ class AnalyzerView(QWidget):
             )
             all_errors.extend(coverage_errors)
 
+        if result.registro_result:
+            registro_errors = self._filter_validated(
+                result.registro_result.advertencias, validadas
+            )
+            all_errors.extend(registro_errors)
+
+        if result.escribano_result:
+            escribano_errors = self._filter_validated(
+                result.escribano_result.advertencias, validadas
+            )
+            all_errors.extend(escribano_errors)
+
+        if result.protocolo_result:
+            protocolo_errors = self._filter_validated(
+                result.protocolo_result.errores + result.protocolo_result.advertencias,
+                validadas,
+            )
+            all_errors.extend(protocolo_errors)
+
+        # Chip de estado del encabezado: verde si todo OK, rojo si no.
+        fatales = sum(1 for e in all_errors if e.fatal)
+        advertencias = len(all_errors) - fatales
+        self._set_status(fatales, advertencias, total)
+
         # Llenar pestañas con la lista completa de registros
         records = list(self._state.records)
         self._tab_all.set_data(records, all_errors, total)
@@ -679,9 +771,44 @@ class AnalyzerView(QWidget):
             records, coverage_errors,
             result.coverage_result.total_revisados if result.coverage_result else 0,
         )
+        self._tab_registro.set_data(
+            records, registro_errors,
+            result.registro_result.total_revisados if result.registro_result else 0,
+        )
+        self._tab_escribano.set_data(
+            records, escribano_errors,
+            result.escribano_result.total_revisados if result.escribano_result else 0,
+        )
+        self._tab_protocolo.set_data(
+            records, protocolo_errors,
+            result.protocolo_result.total_revisados if result.protocolo_result else 0,
+        )
 
         self._correct_btn.setEnabled(False)
         self._validate_btn.setEnabled(False)
+
+    def _set_status(self, fatales: int, advertencias: int, total: int):
+        """Actualiza el chip de estado del encabezado.
+
+        Fondo verde si no hay incidencias; fondo rojo si hay alguna
+        inconsistencia. Muestra el resumen similar al de la pestaña
+        "Todas las Incidencias".
+        """
+        self._status_counts = (fatales, advertencias, total)
+        if fatales == 0 and advertencias == 0:
+            texto = f"\u2713 Sin incidencias \u00b7 {total} revisados"
+            bg, fg = self._palette['success_bg'], self._palette['success']
+        else:
+            texto = (
+                f"\u26A0 {fatales + advertencias} incidencia(s) \u00b7 "
+                f"{fatales} fatal(es) \u00b7 {advertencias} advertencia(s)"
+            )
+            bg, fg = self._palette['error_bg'], self._palette['error']
+        self._status_label.setText(texto)
+        self._status_label.setStyleSheet(
+            f"background-color: {bg}; color: {fg}; "
+            f"border-radius: 6px; padding: 4px 10px;"
+        )
 
     def _filter_result(self, result):
         """Devuelve una copia del resultado sin incidencias validadas."""
@@ -710,14 +837,19 @@ class AnalyzerView(QWidget):
         self._total_label.setStyleSheet(
             f"color: {self._palette['text_secondary']};"
         )
+        self._set_status(*self._status_counts)
         self._tip_label.setStyleSheet(
             f"color: {self._palette['text_disabled']};"
         )
         for panel in (self._panel_folios, self._panel_topica,
-                      self._panel_cronica, self._panel_coverage):
+                      self._panel_cronica, self._panel_coverage,
+                      self._panel_registro, self._panel_escribano,
+                      self._panel_protocolo):
             panel.apply_theme(dark)
         for tab in (self._tab_all, self._tab_folios, self._tab_topica,
-                    self._tab_cronica, self._tab_coverage):
+                    self._tab_cronica, self._tab_coverage,
+                    self._tab_registro, self._tab_escribano,
+                    self._tab_protocolo):
             tab.apply_theme(dark)
 
     def _on_correct(self):

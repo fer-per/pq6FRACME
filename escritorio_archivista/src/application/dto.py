@@ -31,6 +31,9 @@ class ResultadoAnalisis:
     folios_result: Optional[AnalysisResult] = None
     topica_result: Optional[AnalysisResult] = None
     cronica_result: Optional[AnalysisResult] = None
+    registro_result: Optional[AnalysisResult] = None
+    escribano_result: Optional[AnalysisResult] = None
+    protocolo_result: Optional[AnalysisResult] = None
     coverage_result: Optional[AnalysisResult] = None
     suggestions: List[SugerenciaCorreccion] = field(default_factory=list)
     records: List[InventoryRecord] = field(default_factory=list)

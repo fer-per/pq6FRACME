@@ -1,5 +1,5 @@
-# Excluir carpeta docs
-docs/
+# Excluir la documentación original del proyecto (raíz)
+/docs/
 
 # Python cache/compilados
 **/__pycache__/

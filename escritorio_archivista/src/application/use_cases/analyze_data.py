@@ -13,6 +13,9 @@ from src.domain.services.analyzers.folio_analyzer import analizar_folios
 from src.domain.services.analyzers.topica_analyzer import analizar_topica
 from src.domain.services.analyzers.cronica_analyzer import analizar_cronica
 from src.domain.services.analyzers.coverage_analyzer import analizar_coverage
+from src.domain.services.analyzers.registro_analyzer import analizar_registro
+from src.domain.services.analyzers.escribano_analyzer import analizar_escribano
+from src.domain.services.analyzers.protocolo_analyzer import analizar_protocolo
 from src.domain.services.suggestion_generator import generar_sugerencias
 from src.application.dto import ResultadoAnalisis
 
@@ -78,6 +81,9 @@ class AnalizarDatosUseCase:
         folios_result = analizar_folios(records, exclusions)
         topica_result = analizar_topica(records)
         cronica_result = analizar_cronica(records)
+        registro_result = analizar_registro(records)
+        escribano_result = analizar_escribano(records)
+        protocolo_result = analizar_protocolo(records)
         coverage_result = None
         if total_pdf_pages > 0:
             coverage_result = analizar_coverage(
@@ -89,6 +95,9 @@ class AnalizarDatosUseCase:
             folios_result.errores + folios_result.advertencias
             + topica_result.advertencias
             + cronica_result.errores + cronica_result.advertencias
+            + registro_result.advertencias
+            + escribano_result.advertencias
+            + protocolo_result.errores + protocolo_result.advertencias
         )
         if coverage_result:
             all_errors += coverage_result.errores
@@ -98,7 +107,7 @@ class AnalizarDatosUseCase:
 
         # Marcar registros con errores fatales como REVISAR
         fatal_ids = set()
-        for result in [folios_result, cronica_result]:
+        for result in [folios_result, cronica_result, protocolo_result]:
             for error in result.errores:
                 if error.fatal:
                     fatal_ids.add(error.record_id)
@@ -113,7 +122,8 @@ class AnalizarDatosUseCase:
 
         total_errors = sum(
             len(r.errores) + len(r.advertencias)
-            for r in [folios_result, topica_result, cronica_result]
+            for r in [folios_result, topica_result, cronica_result,
+                      registro_result, escribano_result, protocolo_result]
             if r is not None
         )
         if coverage_result:
@@ -125,6 +135,9 @@ class AnalizarDatosUseCase:
             folios_result=folios_result,
             topica_result=topica_result,
             cronica_result=cronica_result,
+            registro_result=registro_result,
+            escribano_result=escribano_result,
+            protocolo_result=protocolo_result,
             coverage_result=coverage_result,
             suggestions=suggestions,
             records=records,

@@ -88,3 +88,17 @@ def _register_views(window: MainWindow, container: Container, state: AppStateVM)
         window.register_view(ViewId.PDF_EDITOR, pdf_editor)
     except ImportError as e:
         logger.warning("PDFEditorView no disponible: %s", e)
+
+    try:
+        from src.presentation.views.docs_view import DocsView
+        docs = DocsView(container, state)
+        window.register_view(ViewId.DOCS, docs)
+    except ImportError as e:
+        logger.warning("DocsView no disponible: %s", e)
+
+    try:
+        from src.presentation.views.support_view import SupportView
+        support = SupportView(container, state)
+        window.register_view(ViewId.SUPPORT, support)
+    except ImportError as e:
+        logger.warning("SupportView no disponible: %s", e)

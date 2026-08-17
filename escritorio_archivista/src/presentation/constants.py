@@ -42,6 +42,9 @@ DEFAULT_OUTPUT_DIR = str(APP_ROOT_DIR / "output")
 # Directorio donde se guardan las configuraciones (perfiles) con nombre.
 SESIONES_DIR = str(APP_ROOT_DIR / "sesiones")
 
+# Directorio de documentación (markdown) consultable desde la aplicación.
+DOCS_DIR = str(APP_ROOT_DIR / "docs")
+
 # Íconos del toggle de tema (botón del header)
 THEME_ICONS_DIR = ICONS_DIR / "theme"
 ICON_MOON = str(THEME_ICONS_DIR / "luna.ico")  # luna → modo oscuro

@@ -9,17 +9,21 @@ from src.domain.services.analyzers.folio_analyzer import analizar_folios
 from src.domain.services.analyzers.topica_analyzer import analizar_topica
 from src.domain.services.analyzers.cronica_analyzer import analizar_cronica
 from src.domain.services.analyzers.coverage_analyzer import analizar_coverage
+from src.domain.services.analyzers.registro_analyzer import analizar_registro
+from src.domain.services.analyzers.escribano_analyzer import analizar_escribano
+from src.domain.services.analyzers.protocolo_analyzer import analizar_protocolo
 from src.domain.services.folio_mapper import FolioMapper
 
 
 def _rec(
     id: str = "#0001", fila: int = 10, folios: str = "001r-002v",
     data_topica: str = "Ciudad", fecha_inicio: str = "15/03/1891",
-    pg_pdf: str = "1-4", protocolo: str = "1", **kwargs
+    pg_pdf: str = "1-4", protocolo: str = "1", registro: str = "001",
+    escribano: str = "García", **kwargs
 ) -> InventoryRecord:
     """Factory helper para registros de prueba."""
     return InventoryRecord(
-        id=id, fila=fila, registro="001", escribano="García",
+        id=id, fila=fila, registro=registro, escribano=escribano,
         protocolo=protocolo, folios=folios, pg_pdf=pg_pdf, titulo="Compraventa",
         data_topica=data_topica, fecha_inicio=fecha_inicio, **kwargs,
     )
@@ -404,3 +408,164 @@ class TestCoverageAnalyzer:
         result = analizar_coverage(records, total_pdf_pages=10)
         assert result.ok
         assert result.info_extra["diferencia"] == 0
+
+
+# ═══════════════════════════════════════════════════════════════
+# REGISTRO ANALYZER
+# ═══════════════════════════════════════════════════════════════
+
+class TestRegistroAnalyzer:
+
+    def test_registro_correcto(self):
+        records = [
+            _rec(id="#0001", registro="001", protocolo="1"),
+            _rec(id="#0002", fila=11, registro="002", protocolo="1"),
+        ]
+        result = analizar_registro(records)
+        assert result.ok
+        assert result.info_extra["registros_validos"] == 2
+
+    def test_registro_vacio(self):
+        records = [_rec(id="#0001", registro="", protocolo="1")]
+        result = analizar_registro(records)
+        assert len(result.advertencias) == 1
+        assert result.advertencias[0].tipo == "REGISTRO"
+        assert result.advertencias[0].fatal is False
+
+    def test_registro_no_numerico(self):
+        records = [_rec(id="#0001", registro="00:00:00", protocolo="1")]
+        result = analizar_registro(records)
+        assert len(result.advertencias) == 1
+        assert result.advertencias[0].tipo == "REGISTRO"
+
+    def test_registro_repetido_en_orden_no_advierte(self):
+        """El mismo número puede repetirse si la secuencia está en orden."""
+        records = [
+            _rec(id="#0001", registro="11", protocolo="1"),
+            _rec(id="#0002", fila=11, registro="11", protocolo="1"),
+            _rec(id="#0003", fila=12, registro="12", protocolo="1"),
+        ]
+        result = analizar_registro(records)
+        assert result.ok
+
+    def test_registro_fuera_de_orden_advierte(self):
+        """Un número menor que el anterior rompe el orden y se advierte."""
+        records = [
+            _rec(id="#0001", registro="11", protocolo="1"),
+            _rec(id="#0002", fila=11, registro="12", protocolo="1"),
+            _rec(id="#0003", fila=12, registro="11", protocolo="1"),
+        ]
+        result = analizar_registro(records)
+        assert len(result.advertencias) == 1
+        assert result.advertencias[0].tipo == "REGISTRO"
+        assert result.advertencias[0].fatal is False
+
+    def test_registro_letras_fuera_de_orden_advierte(self):
+        records = [
+            _rec(id="#0001", registro="11B", protocolo="1"),
+            _rec(id="#0002", fila=11, registro="11A", protocolo="1"),
+        ]
+        result = analizar_registro(records)
+        assert len(result.advertencias) == 1
+
+    def test_registro_con_letra_es_valido(self):
+        """Registros tipo 11A, 11B, 5A son válidos (número + una letra)."""
+        records = [
+            _rec(id="#0001", registro="5A", protocolo="1"),
+            _rec(id="#0002", fila=11, registro="11", protocolo="1"),
+            _rec(id="#0003", fila=12, registro="11A", protocolo="1"),
+            _rec(id="#0004", fila=13, registro="11B", protocolo="1"),
+        ]
+        result = analizar_registro(records)
+        assert result.ok
+
+    def test_registro_con_varias_letras_es_invalido(self):
+        records = [_rec(id="#0001", registro="11AA", protocolo="1")]
+        result = analizar_registro(records)
+        assert len(result.advertencias) == 1
+        assert result.advertencias[0].tipo == "REGISTRO"
+
+    def test_mismo_registro_distinto_protocolo_no_duplica(self):
+        records = [
+            _rec(id="#0001", registro="001", protocolo="1"),
+            _rec(id="#0002", fila=11, registro="001", protocolo="2"),
+        ]
+        result = analizar_registro(records)
+        assert result.ok
+
+
+# ═══════════════════════════════════════════════════════════════
+# ESCRIBANO ANALYZER
+# ═══════════════════════════════════════════════════════════════
+
+class TestEscribanoAnalyzer:
+
+    def test_escribano_correcto(self):
+        records = [_rec(id="#0001", escribano="García López")]
+        result = analizar_escribano(records)
+        assert result.ok
+
+    def test_escribano_vacio(self):
+        records = [_rec(id="#0001", escribano="")]
+        result = analizar_escribano(records)
+        assert len(result.advertencias) == 1
+        assert result.advertencias[0].tipo == "ESCRIBANO"
+        assert result.advertencias[0].fatal is False
+
+    def test_escribano_muy_corto(self):
+        records = [_rec(id="#0001", escribano="X")]
+        result = analizar_escribano(records)
+        assert len(result.advertencias) == 1
+        assert "corto" in result.advertencias[0].descripcion
+
+    def test_escribano_muy_largo(self):
+        records = [_rec(id="#0001", escribano="A" * 70)]
+        result = analizar_escribano(records)
+        assert len(result.advertencias) == 1
+        assert "largo" in result.advertencias[0].descripcion
+
+
+# ═══════════════════════════════════════════════════════════════
+# PROTOCOLO ANALYZER
+# ═══════════════════════════════════════════════════════════════
+
+class TestProtocoloAnalyzer:
+
+    def test_protocolo_correcto(self):
+        records = [
+            _rec(id="#0001", protocolo="1", escribano="García"),
+            _rec(id="#0002", fila=11, protocolo="2", escribano="García"),
+        ]
+        result = analizar_protocolo(records)
+        assert result.ok
+
+    def test_protocolo_vacio(self):
+        records = [_rec(id="#0001", protocolo="", escribano="García")]
+        result = analizar_protocolo(records)
+        assert len(result.advertencias) == 1
+        assert result.advertencias[0].tipo == "PROTOCOLO"
+        assert result.advertencias[0].fatal is False
+
+    def test_protocolo_no_numerico(self):
+        records = [_rec(id="#0001", protocolo="A", escribano="García")]
+        result = analizar_protocolo(records)
+        assert len(result.advertencias) == 1
+        assert result.advertencias[0].tipo == "PROTOCOLO"
+
+    def test_regresion_de_protocolo_mismo_escribano(self):
+        records = [
+            _rec(id="#0001", protocolo="3", escribano="García"),
+            _rec(id="#0002", fila=11, protocolo="1", escribano="García"),
+        ]
+        result = analizar_protocolo(records)
+        assert len(result.errores) == 1
+        assert result.errores[0].tipo == "PROTOCOLO"
+        assert result.errores[0].fatal is True
+
+    def test_protocolo_se_reinicia_por_escribano(self):
+        records = [
+            _rec(id="#0001", protocolo="3", escribano="García"),
+            _rec(id="#0002", fila=11, protocolo="1", escribano="López"),
+        ]
+        result = analizar_protocolo(records)
+        assert result.ok
