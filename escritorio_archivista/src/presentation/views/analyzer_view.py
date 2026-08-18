@@ -91,6 +91,15 @@ class AnalyzerPanel(QWidget):
                 f"color: {color}; background: transparent;"
             )
 
+    def reset(self):
+        """Vuelve al estado inicial (sin análisis ejecutado)."""
+        self._result = None
+        self._icon.setText("\u23F3")
+        self._count_label.setText("")
+        self._count_label.setStyleSheet(
+            f"color: {self._palette['text_secondary']}; background: transparent;"
+        )
+
     def apply_theme(self, dark: bool):
         """Reaplica los estilos dependientes del tema."""
         self._palette = get_palette(dark)
@@ -317,6 +326,16 @@ class AnalyzerErrorTab(QWidget):
             self._table.load_data([r for r in rows if r["_errors"]])
         else:
             self._table.load_data(rows)
+
+    def reset(self):
+        """Limpia la pestaña (nueva configuración / sin análisis)."""
+        self._records = []
+        self._errors = []
+        self._all_rows = []
+        self._total_revisados = 0
+        self._info_label.setText(f"{self._name}: sin ejecutar")
+        self._table.load_data([])
+        self.history.clear()
 
     def apply_theme(self, dark: bool):
         """Reaplica el tema a la tabla de la pestaña."""
@@ -851,6 +870,32 @@ class AnalyzerView(QWidget):
                     self._tab_registro, self._tab_escribano,
                     self._tab_protocolo):
             tab.apply_theme(dark)
+
+    def refresh_from_state(self):
+        """Limpia el analizador cuando se crea una configuración nueva."""
+        self._last_result = None
+        self._status_counts = (0, 0, 0)
+        self._total_label.setText("0 filas totales")
+        self._status_label.setText("Sin análisis")
+        self._status_label.setStyleSheet(
+            f"background-color: {self._palette['surface']}; "
+            f"color: {self._palette['text_secondary']}; "
+            f"border: 1px solid {self._palette['outline_variant']}; "
+            f"border-radius: 6px; padding: 4px 10px;"
+        )
+        for panel in (self._panel_folios, self._panel_topica,
+                      self._panel_cronica, self._panel_coverage,
+                      self._panel_registro, self._panel_escribano,
+                      self._panel_protocolo):
+            panel.reset()
+        for tab in (self._tab_all, self._tab_folios, self._tab_topica,
+                    self._tab_cronica, self._tab_coverage,
+                    self._tab_registro, self._tab_escribano,
+                    self._tab_protocolo):
+            tab.reset()
+        self._correct_btn.setEnabled(False)
+        self._validate_btn.setEnabled(False)
+        self._analyze_btn.setEnabled(True)
 
     def _on_correct(self):
         """Abre el modal de edición para el registro/fragmente seleccionado."""

@@ -458,6 +458,23 @@ class PDFEditorView(QWidget):
         if hasattr(main_window, 'pdf_preview'):
             main_window.pdf_preview.set_active_sequence(active)
 
+    def refresh_from_state(self):
+        """Limpia el editor cuando se crea una configuración nueva."""
+        for thumb in self._thumbnails:
+            thumb.deleteLater()
+        self._thumbnails.clear()
+        self._thumb_by_page.clear()
+        self._doc_id += 1
+        self._pending.clear()
+        self._rendered.clear()
+        self._thumb_tops.clear()
+        self._last_total = 0
+        self._last_path = None
+        self._selected_page = None
+        self._grid_widget.setMinimumSize(0, 0)
+        self._undo_btn.setEnabled(False)
+        self._redo_btn.setEnabled(False)
+
     def apply_theme(self, dark: bool):
         """Reaplica el tema al toolbar y a los thumbnails."""
         self._palette = get_palette(dark)

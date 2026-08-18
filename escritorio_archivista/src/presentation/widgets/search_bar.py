@@ -88,6 +88,10 @@ class SearchBar(QWidget):
         self._input.clear()
         self.search_cleared.emit()
 
+    def clear(self):
+        """API pública: limpia el campo de búsqueda."""
+        self._clear()
+
     def text(self) -> str:
         """Retorna el texto actual."""
         return self._input.text()

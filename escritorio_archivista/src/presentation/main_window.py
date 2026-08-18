@@ -420,6 +420,7 @@ class MainWindow(QMainWindow):
             return
         self._state.reset()
         self._header.set_profile_name("")
+        self._refresh_all_views()
         self.navigate_to(ViewId.WORKSPACE)
         self._state.add_log(
             "INFO", "Nueva configuración iniciada."
@@ -601,6 +602,25 @@ class MainWindow(QMainWindow):
             refresh()
         except Exception as e:
             self._state.add_log("ERR", f"No se pudieron recargar los archivos: {e}")
+
+    def _refresh_all_views(self):
+        """Refresca todas las vistas registradas desde el estado actual.
+
+        Se usa al crear una configuración nueva para que ninguna vista
+        conserve datos de la configuración anterior (como si se acabara
+        de abrir la aplicación).
+        """
+        for idx in self._views.values():
+            widget = self._stack.widget(idx)
+            if widget is None:
+                continue
+            refresh = getattr(widget, "refresh_from_state", None)
+            if refresh is None:
+                continue
+            try:
+                refresh()
+            except Exception as e:
+                self._state.add_log("ERR", f"No se pudo refrescar la vista: {e}")
 
     @property
     def pdf_preview(self) -> PDFPreview:

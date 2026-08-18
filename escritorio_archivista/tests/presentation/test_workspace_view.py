@@ -44,9 +44,14 @@ class _StubSpin:
 class _StubDrop:
     def __init__(self, path=None):
         self._path = path
+        self.cleared = False
 
     def set_file(self, path):
         self._path = path
+
+    def clear(self):
+        self._path = None
+        self.cleared = True
 
 
 class _StubTable:
@@ -60,6 +65,11 @@ class _StubTable:
 class _StubLabel:
     def setText(self, value):
         self._text = value
+
+
+class _StubSearch:
+    def clear(self):
+        pass
 
 
 class _StubState:
@@ -83,12 +93,12 @@ class TestRefreshFromState:
         view._vm = _StubVM()
         view._excel_drop = _StubDrop()
         view._pdf_drop = _StubDrop()
-        view._fila_datos_inicio_spin = _StubSpin()
         view._fila_inicio_spin = _StubSpin()
         view._fila_fin_spin = _StubSpin()
         view._pag_pdf_spin = _StubSpin()
         view._table = _StubTable()
         view._count_label = _StubLabel()
+        view._search = _StubSearch()
         return view
 
     def test_no_recarga_inventario_si_hay_records_restaurados(self, tmp_path):
@@ -119,3 +129,15 @@ class TestRefreshFromState:
 
         assert view._vm.load_inventory_calls == 1
         assert view._vm.set_pdf_path_calls == 1
+
+    def test_limpia_drop_zones_sin_archivos(self):
+        """Nueva configuración sin archivos: las zonas de carga quedan limpias."""
+        state = _StubState([], None, None)
+
+        view = self._make_view(state)
+        view.refresh_from_state()
+
+        assert view._excel_drop.cleared is True
+        assert view._pdf_drop.cleared is True
+        assert view._vm.load_inventory_calls == 0
+        assert view._vm.set_pdf_path_calls == 0

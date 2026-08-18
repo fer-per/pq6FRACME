@@ -124,13 +124,15 @@ class ProcessView(QWidget):
         table_group = QGroupBox("Detalle de Foliación Mapeada (Excel vs PDF)")
         table_layout = QVBoxLayout(table_group)
         self._table = DataTable(
-            columns=["Fila", "Registro", "Folios", "Rango PDF", "Estado", "Escribano"],
-            field_map=["fila", "registro", "folios", "pg_pdf", "estado", "escribano"],
+            columns=["Fila", "Registro", "Escribano", "Protocolo",
+                      "Folios", "Pág. PDF", "Fecha Inicio", "Título",
+                      "Interesado 1", "Interesado 2", "Estado"],
+            field_map=["fila", "registro", "escribano", "protocolo",
+                        "folios", "pg_pdf", "fecha_inicio", "titulo",
+                        "interesado1", "interesado2", "estado"],
         )
-        # Solo esta tabla se adapta al espacio disponible: las columnas se
-        # estiran para llenar el ancho de la vista.
         self._table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
+            QHeaderView.ResizeMode.ResizeToContents
         )
         table_layout.addWidget(self._table)
         layout.addWidget(table_group, stretch=1)
@@ -233,6 +235,18 @@ class ProcessView(QWidget):
 
     def _refresh_table(self):
         self._table.load_data(self._state.records)
+
+    def refresh_from_state(self):
+        """Refleja el estado actual en la vista (p. ej. nueva configuración)."""
+        self._output_label.setText(self._state.output_dir or "No seleccionado")
+        self._output_label.setToolTip(self._state.output_dir or "")
+        self._open_dir_btn.setEnabled(bool(self._state.output_dir))
+        self._fragment_btn.setText("  FRAGMENTAR PDF")
+        self._fragment_btn.setEnabled(True)
+        self._progress.setVisible(False)
+        self._status_label.setText("")
+        self._status_label.setWordWrap(False)
+        self._refresh_table()
 
     def apply_theme(self, dark: bool):
         """Reaplica el tema a etiquetas y tabla de la vista."""

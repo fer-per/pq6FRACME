@@ -126,7 +126,7 @@ class TestHierarchyBuilder:
         )
 
         assert "ACERVO DOCUMENTAL NUMERO 7" in ruta
-        assert "SIGLO XIX" in ruta
+        assert "SIGLO 19" in ruta
         assert "FONDO DOCUMENTAL" in ruta
         assert "GARCÍA LÓPEZ" in ruta
         assert "1891" in ruta
@@ -152,7 +152,7 @@ class TestHierarchyBuilder:
 
         niveles = ruta[len("/output"):].strip(os.sep).split(os.sep)
         assert niveles[0] == "ACERVO DOCUMENTAL NUMERO 7"
-        assert niveles[1] == "SIGLO XIX"
+        assert niveles[1] == "SIGLO 19"
         assert niveles[2] == "FONDO DOCUMENTAL"
         assert niveles[3] == "GARCÍA"
         assert niveles[5] == "PROTOCOLO 3"
@@ -192,7 +192,7 @@ class TestHierarchyBuilder:
             interesado2="María López",
         )
         ruta = self.builder.construir_ruta(record, "/output", "7", "García", "")
-        assert "SIGLO XIX" in ruta
+        assert "SIGLO 19" in ruta
 
     def test_siglo_y_año_ausentes_usa_respaldo(self):
         record = InventoryRecord(

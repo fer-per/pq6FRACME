@@ -9,7 +9,7 @@ y se continúa con los siguientes niveles.
 
 Niveles:
 1. ACERVO DOCUMENTAL NUMERO {acervo_num}     ← metadato (fila del Excel)
-2. SIGLO {siglo_romano}                     ← metadato romano (fila del Excel)
+2. SIGLO {siglo_arabigo}                     ← metadato (fila del Excel)
 3. FONDO DOCUMENTAL                          ← constante
 4. {escribano}                               ← metadato (fila del Excel)
 5. {año}                                     ← de la fecha de inicio
@@ -44,6 +44,7 @@ from src.domain.value_objects import (
     YEAR_MIN,
     YEAR_MAX,
     INVALID_FILENAME_CHARS,
+    ROMAN_TO_ARABIC,
     SIN_SIGLO,
     SIN_ESCRIBANO,
     SIN_ANIO,
@@ -104,12 +105,15 @@ class HierarchyBuilder(HierarchyBuilderPort):
 
     @staticmethod
     def _nivel_siglo(siglo: str, anio: Optional[int]) -> str:
-        """Nivel 2: siglo romano (metadato); sin metadato se deriva del año."""
+        """Nivel 2: siglo en números arábigos (metadato); sin metadato se deriva del año."""
         romano = (siglo or "").strip().upper()
         if romano:
+            arabico = ROMAN_TO_ARABIC.get(romano)
+            if arabico is not None:
+                return f"SIGLO {arabico}"
             return f"SIGLO {romano}"
         if anio is not None:
-            return f"SIGLO {HierarchyBuilder._arabigo_a_romano((anio // 100) + 1)}"
+            return f"SIGLO {(anio // 100) + 1}"
         return SIN_SIGLO
 
     @staticmethod
@@ -316,22 +320,6 @@ class HierarchyBuilder(HierarchyBuilderPort):
             return "SIN_NOMBRE"
 
         return name
-
-    @staticmethod
-    def _arabigo_a_romano(n: int) -> str:
-        """
-        Convierte un entero (siglo) a número romano para la jerarquía.
-
-        Soporta siglos hasta el 39; fuera de rango devuelve el número
-        tal cual.
-        """
-        if n <= 0 or n >= 40:
-            return str(n)
-        decenas = ["", "X", "XX", "XXX"][n // 10]
-        unidades = [
-            "", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX",
-        ][n % 10]
-        return decenas + unidades
 
     @staticmethod
     def _resolver_colision(full_path: str) -> str:

@@ -156,11 +156,15 @@ class WorkspaceVM(QObject):
         self._state.add_log("ERR", f"Error cargando inventario: {error_msg}")
         self.loading_error.emit(error_msg)
 
-    def update_config(self, fila_datos_inicio: int, fila_inicio: int,
+    def update_config(self, fila_inicio: int,
                       fila_fin: int, pag_pdf_inicio: int):
-        """Actualiza la configuración de mapeo y recarga."""
+        """Actualiza la configuración de mapeo y recarga.
+
+        ``fila_datos_inicio`` (dónde empiezan los datos del Excel) queda
+        fijado en el valor auto-detectado al cargar; aquí solo se ajustan
+        los filtros de rango y el punto de arranque del PDF.
+        """
         self._state.fila_datos_auto = False
-        self._state.fila_datos_inicio = fila_datos_inicio
         self._state.fila_inicio = fila_inicio
         self._state.fila_fin = fila_fin
         self._state.pag_pdf_inicio = pag_pdf_inicio

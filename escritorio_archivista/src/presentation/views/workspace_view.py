@@ -212,6 +212,13 @@ class DropZone(QWidget):
         self._refresh_texts()
         self._update_style(False)
 
+    def clear(self):
+        """Limpia el archivo cargado y restaura el estado inicial."""
+        self._file_path = None
+        self._filename = None
+        self._refresh_texts()
+        self._update_style(False)
+
     @property
     def file_path(self):
         return self._file_path
@@ -259,40 +266,33 @@ class WorkspaceView(QWidget):
         step2_grid = QGridLayout(step2)
         step2_grid.setSpacing(12)
 
-        step2_grid.addWidget(QLabel("Fila inicio de datos:"), 0, 0)
-        self._fila_datos_inicio_spin = QSpinBox()
-        self._fila_datos_inicio_spin.setRange(0, 99999)
-        self._fila_datos_inicio_spin.setValue(self._state.fila_datos_inicio)
-        self._fila_datos_inicio_spin.setFixedWidth(80)
-        step2_grid.addWidget(self._fila_datos_inicio_spin, 0, 1)
-
-        step2_grid.addWidget(QLabel("Inicia desde fila:"), 0, 2)
+        step2_grid.addWidget(QLabel("Inicia desde fila:"), 0, 0)
         self._fila_inicio_spin = QSpinBox()
         self._fila_inicio_spin.setRange(0, 99999)
         self._fila_inicio_spin.setValue(self._state.fila_inicio)
         self._fila_inicio_spin.setFixedWidth(80)
-        step2_grid.addWidget(self._fila_inicio_spin, 0, 3)
+        step2_grid.addWidget(self._fila_inicio_spin, 0, 1)
 
-        step2_grid.addWidget(QLabel("Termina en fila:"), 0, 4)
+        step2_grid.addWidget(QLabel("Termina en fila:"), 0, 2)
         self._fila_fin_spin = QSpinBox()
         self._fila_fin_spin.setRange(0, 99999)
         self._fila_fin_spin.setValue(self._state.fila_fin)
         self._fila_fin_spin.setFixedWidth(80)
-        step2_grid.addWidget(self._fila_fin_spin, 0, 5)
+        step2_grid.addWidget(self._fila_fin_spin, 0, 3)
 
-        step2_grid.addWidget(QLabel("Pág. PDF Inicio:"), 0, 6)
+        step2_grid.addWidget(QLabel("Pág. PDF Inicio:"), 0, 4)
         self._pag_pdf_spin = QSpinBox()
         self._pag_pdf_spin.setRange(1, 99999)
         self._pag_pdf_spin.setValue(self._state.pag_pdf_inicio)
         self._pag_pdf_spin.setFixedWidth(80)
-        step2_grid.addWidget(self._pag_pdf_spin, 0, 7)
+        step2_grid.addWidget(self._pag_pdf_spin, 0, 5)
 
         self._save_config_btn = QPushButton(" Guardar Cambios")
         self._save_config_btn.setFixedHeight(32)
         self._save_config_btn.setIcon(white_icon(ICON_SAVE))
         self._save_config_btn.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
         step2_grid.addWidget(
-            self._save_config_btn, 1, 6, 1, 2, Qt.AlignmentFlag.AlignRight
+            self._save_config_btn, 1, 4, 1, 2, Qt.AlignmentFlag.AlignRight
         )
 
         layout.addWidget(step2)
@@ -382,7 +382,6 @@ class WorkspaceView(QWidget):
 
     def _on_save_config(self):
         self._vm.update_config(
-            fila_datos_inicio=self._fila_datos_inicio_spin.value(),
             fila_inicio=self._fila_inicio_spin.value(),
             fila_fin=self._fila_fin_spin.value(),
             pag_pdf_inicio=self._pag_pdf_spin.value(),
@@ -412,7 +411,6 @@ class WorkspaceView(QWidget):
             pass
 
     def _on_loading_finished(self, result):
-        self._fila_datos_inicio_spin.setValue(self._state.fila_datos_inicio)
         self._fila_inicio_spin.setValue(self._state.fila_inicio)
         self._fila_fin_spin.setValue(self._state.fila_fin)
         self._pag_pdf_spin.setValue(self._state.pag_pdf_inicio)
@@ -428,16 +426,21 @@ class WorkspaceView(QWidget):
 
     def refresh_from_state(self):
         """Refleja el estado cargado (p. ej. una configuración) en Paso 1 y 2
-        y recarga el Excel y PDF con esos parámetros de mapeo."""
+        y recarga el Excel y PDF con esos parámetros de mapeo. Si el estado
+        está vacío (nueva configuración), limpia las zonas de carga."""
         if self._state.excel_path and os.path.isfile(self._state.excel_path):
             self._excel_drop.set_file(self._state.excel_path)
+        else:
+            self._excel_drop.clear()
         if self._state.pdf_path and os.path.isfile(self._state.pdf_path):
             self._pdf_drop.set_file(self._state.pdf_path)
+        else:
+            self._pdf_drop.clear()
 
-        self._fila_datos_inicio_spin.setValue(self._state.fila_datos_inicio)
         self._fila_inicio_spin.setValue(self._state.fila_inicio)
         self._fila_fin_spin.setValue(self._state.fila_fin)
         self._pag_pdf_spin.setValue(self._state.pag_pdf_inicio)
+        self._search.clear()
         self._refresh_table()
 
         # Recargar el inventario desde el Excel solo si no hay registros
